@@ -200,6 +200,8 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
                       contentFit="cover"
                       transition={150}
                     />
+                  ) : jersey.trim() ? (
+                    <Text style={styles.photoJersey} testID="photo-jersey">{jersey.trim()}</Text>
                   ) : (
                     <Ionicons name="person" size={38} color={colors.muted} />
                   )}
@@ -450,6 +452,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photo: { width: 84, height: 84, borderRadius: radius.pill },
+  photoJersey: { fontFamily: font.extra, fontSize: 38, color: colors.brand, lineHeight: 44 },
   photoOverlay: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: radius.pill,

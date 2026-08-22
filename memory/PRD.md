@@ -14,6 +14,7 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - 12 games (Spiel) Oct 2026–Apr 2027 + weekly Thursday 19:00 trainings from today through 2031 + coach-added Treffen.
 
 ## Fixed (2026-08, v3.0.1)
+- [x] **Trikotnummer-Avatar-Fallback**: Wenn ein Spieler kein Profilfoto hat, aber eine Trikotnummer, zeigt der Avatar-Kreis groß die Nummer (statt Positions-Kürzel oder Personen-Icon). Sowohl in der Kader-Liste als auch im Edit-Sheet. Fallback-Kette: Foto → Trikotnummer → Positions-Kürzel → "?".
 - [x] **Kader "Speichern" macht die Änderungen wieder sichtbar**: `GET /api/players` lieferte PII (E-Mail, Geburtsdatum, Trikotnummer, SpielerID, Foto) nur an anonyme Login-Screen-Aufrufer und blendete sie für die Kader-Liste eingeloggter User aus. Neu: Auth-Header wird an `/players` mitgeschickt (`api.ts` PUBLIC_PATHS aktualisiert), Backend nutzt `OptionalPlayer`-Dependency und liefert die vollen Felder, wenn ein gültiger JWT vorliegt (`routers/players.py`, `auth.py`). Ergebnis: gespeicherte Trikotnummer/Geburtsdatum/SpielerID erscheinen sofort in der Karte und im Edit-Sheet.
 
 ## Implemented (2026-08, v3.0.1)

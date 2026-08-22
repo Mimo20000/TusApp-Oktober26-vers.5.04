@@ -135,10 +135,14 @@ export default function Kader() {
                       contentFit="cover"
                       transition={150}
                     />
+                  ) : p.jersey_number != null ? (
+                    <Text style={styles.avatarJersey} testID={`avatar-jersey-${p.id}`}>
+                      {p.jersey_number}
+                    </Text>
                   ) : (
                     <Text style={styles.avatarText}>{p.position ?? "?"}</Text>
                   )}
-                  {p.jersey_number != null ? (
+                  {p.avatar_file_id && p.jersey_number != null ? (
                     <View style={styles.jerseyBadge}>
                       <Text style={styles.jerseyBadgeText}>{p.jersey_number}</Text>
                     </View>
@@ -304,6 +308,7 @@ const styles = StyleSheet.create({
   },
   avatarImg: { width: 46, height: 46, borderRadius: radius.pill },
   avatarText: { fontFamily: font.extra, fontSize: 14, color: colors.brand },
+  avatarJersey: { fontFamily: font.extra, fontSize: 20, color: colors.brand, lineHeight: 24 },
   jerseyBadge: {
     position: "absolute",
     bottom: -2,
