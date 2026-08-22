@@ -42,7 +42,7 @@ export default function ChatHome() {
   const load = useCallback(async () => {
     if (!player) return;
     try {
-      setData(await api.conversations(player.id));
+      setData(await api.conversations());
     } finally {
       setLoading(false);
     }

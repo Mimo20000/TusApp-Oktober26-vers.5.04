@@ -2,13 +2,14 @@ from datetime import datetime
 
 from fastapi import APIRouter
 
+from auth import CurrentPlayer
 from db import db
 
 router = APIRouter()
 
 
 @router.get("/stats")
-async def get_stats():
+async def get_stats(_current: CurrentPlayer):
     players = await db.players.find({}, {"_id": 0}).to_list(500)
     events = await db.events.find({}, {"_id": 0}).to_list(500)
     att = await db.attendance.find({}, {"_id": 0}).to_list(5000)

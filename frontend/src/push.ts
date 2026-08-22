@@ -26,7 +26,7 @@ export async function registerForPush(playerId: string) {
       projectId ? { projectId } : undefined
     );
     if (tokenResp?.data) {
-      await api.registerPush(playerId, tokenResp.data);
+      await api.registerPush(tokenResp.data);
     }
   } catch {
     // ignore – push simply stays inactive until a real build is available

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
+from auth import CurrentPlayer
 from db import db
 from models import BeerBody, DrivingBody, RSVP
 from push import direct_conv_id, notify_new_message
@@ -85,13 +86,16 @@ async def _dm_coach_absage(player: dict, event: dict, reason: str) -> None:
 
 
 @router.get("/attendance")
-async def get_attendance():
+async def get_attendance(_current: CurrentPlayer):
     docs = await db.attendance.find({}, {"_id": 0}).to_list(5000)
     return docs
 
 
 @router.post("/rsvp")
-async def set_rsvp(rsvp: RSVP):
+async def set_rsvp(rsvp: RSVP, current_player_id: CurrentPlayer):
+    # Ignore any client-supplied player_id — always use the token's subject.
+    if rsvp.player_id != current_player_id:
+        rsvp.player_id = current_player_id
     if rsvp.status not in ("zugesagt", "abgesagt"):
         raise HTTPException(status_code=400, detail="Ungültiger Status")
     reason = (rsvp.reason or "").strip()
@@ -132,7 +136,9 @@ async def set_rsvp(rsvp: RSVP):
 
 
 @router.post("/driving")
-async def set_driving(body: DrivingBody):
+async def set_driving(body: DrivingBody, current_player_id: CurrentPlayer):
+    if body.player_id != current_player_id:
+        body.player_id = current_player_id
     prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
     was = bool(prev.get("driving")) if prev else False
     await db.attendance.update_one(
@@ -164,7 +170,9 @@ async def set_driving(body: DrivingBody):
 
 
 @router.post("/beer")
-async def set_beer(body: BeerBody):
+async def set_beer(body: BeerBody, current_player_id: CurrentPlayer):
+    if body.player_id != current_player_id:
+        body.player_id = current_player_id
     prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
     was = bool(prev.get("beer")) if prev else False
     await db.attendance.update_one(

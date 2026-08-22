@@ -36,34 +36,46 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const savedId = await storage.getItem<string | null>(KEY, null);
         const token = await storage.secureGet<string | null>(TOKEN_KEY, null);
-        // Restore the cached player object FIRST so the user stays logged in
-        // even if the network/players list is momentarily unavailable.
+        // Probe the token before trusting the cached player: this ensures a
+        // revoked/expired token cannot resurrect the session.
+        let tokenValid = false;
         if (savedId && token) {
-          const cached = await storage.getItem<string | null>(PLAYER_KEY, null);
-          if (cached) {
-            try {
-              setPlayer(JSON.parse(cached) as Player);
-            } catch {
-              // ignore malformed cache
-            }
+          try {
+            await api.me();
+            tokenValid = true;
+          } catch {
+            tokenValid = false;
           }
         }
-        // Then refresh the players list and reconcile the current player.
+        if (!tokenValid) {
+          await storage.secureRemove(TOKEN_KEY).catch(() => {});
+          await storage.removeItem(KEY).catch(() => {});
+          await storage.removeItem(PLAYER_KEY).catch(() => {});
+          setPlayer(null);
+          try {
+            setPlayers(await api.players());
+          } catch {}
+          return;
+        }
+        const cached = await storage.getItem<string | null>(PLAYER_KEY, null);
+        if (cached) {
+          try {
+            setPlayer(JSON.parse(cached) as Player);
+          } catch {}
+        }
         try {
           const list = await api.players();
           setPlayers(list);
-          if (savedId && token) {
-            const found = list.find((p) => p.id === savedId);
-            if (found) {
-              setPlayer(found);
-              await storage.setItem(PLAYER_KEY, JSON.stringify(found));
-            }
+          const found = list.find((p) => p.id === savedId);
+          if (found) {
+            setPlayer(found);
+            await storage.setItem(PLAYER_KEY, JSON.stringify(found));
           }
         } catch {
-          // offline: keep the cached player (already set above)
+          // offline: keep cached player if any
         }
       } catch {
-        // ignore, screens handle retries
+        // ignore
       } finally {
         setReady(true);
       }

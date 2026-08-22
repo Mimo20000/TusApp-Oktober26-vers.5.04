@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from auth import CoachPlayer, CurrentPlayer
 from config import HANDBALL_TEAM_ID
 from bw_holidays import FERIEN_BW, feiertage_bw
 from db import db
@@ -13,7 +14,6 @@ DEFAULT_BIERWART_EMAIL = "lj-sascha@web.de"
 
 class BierwartUpdate(BaseModel):
     email: str
-    actor_id: str  # must be a Coach player to be accepted
 
 
 @router.get("/")
@@ -22,24 +22,19 @@ async def root():
 
 
 @router.get("/settings/bierwart")
-async def get_bierwart():
+async def get_bierwart(_current: CurrentPlayer):
     doc = await db.settings.find_one({"key": "bierwart"}, {"_id": 0}) or {}
     return {"email": doc.get("email") or DEFAULT_BIERWART_EMAIL}
 
 
 @router.patch("/settings/bierwart")
-async def set_bierwart(body: BierwartUpdate):
-    # Only a Coach may update the bierwart email.
-    actor = await db.players.find_one({"id": body.actor_id})
-    if not actor or actor.get("position") != "Coach":
-        raise HTTPException(status_code=403, detail="Nur der Trainer darf den Bierwart ändern.")
+async def set_bierwart(body: BierwartUpdate, coach_id: CoachPlayer):
     email = (body.email or "").strip()
-    # very light sanity check — real validation happens in PayPal
     if not email or "@" not in email or "." not in email.split("@", 1)[1]:
         raise HTTPException(status_code=400, detail="Bitte gültige E-Mail-Adresse eingeben.")
     await db.settings.update_one(
         {"key": "bierwart"},
-        {"$set": {"key": "bierwart", "email": email, "updated_by": actor.get("id")}},
+        {"$set": {"key": "bierwart", "email": email, "updated_by": coach_id}},
         upsert=True,
     )
     return {"ok": True, "email": email}

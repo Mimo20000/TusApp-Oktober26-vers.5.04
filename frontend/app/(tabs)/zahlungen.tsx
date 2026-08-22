@@ -24,7 +24,7 @@ export default function Zahlungen() {
     if (!player) return;
     setError(null);
     try {
-      const res = await api.listPayments(player.id);
+      const res = await api.listPayments();
       setPayments(res.payments);
       setSums(res.sums);
       setAllowed(true);

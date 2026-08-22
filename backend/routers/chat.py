@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
+from auth import CurrentPlayer
 from db import db
 from models import MessageBody, PushRegisterBody, ReadBody
 from push import direct_conv_id, notify_new_message
@@ -13,15 +14,16 @@ router = APIRouter()
 
 
 @router.get("/messages")
-async def get_messages(conversation_id: str, limit: int = 200):
+async def get_messages(conversation_id: str, _current: CurrentPlayer, limit: int = 200):
     docs = await db.messages.find({"conversation_id": conversation_id}, {"_id": 0}).to_list(2000)
     docs.sort(key=lambda m: m["created_at"])
     return docs[-limit:]
 
 
 @router.post("/messages")
-async def post_message(body: MessageBody):
-    p = await db.players.find_one({"id": body.sender_id})
+async def post_message(body: MessageBody, current_player_id: CurrentPlayer):
+    body.sender_id = current_player_id
+    p = await db.players.find_one({"id": current_player_id})
     if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
     if not body.text.strip() and not body.attachment:
@@ -31,7 +33,7 @@ async def post_message(body: MessageBody):
         "id": "MSG" + uuid.uuid4().hex[:10],
         "conversation_id": body.conversation_id,
         "scope": body.scope,
-        "sender_id": body.sender_id,
+        "sender_id": current_player_id,
         "sender_name": p["name"],
         "text": body.text.strip(),
         "attachment": body.attachment,
@@ -39,7 +41,7 @@ async def post_message(body: MessageBody):
     }
     await db.messages.insert_one(dict(msg))
     await db.reads.update_one(
-        {"player_id": body.sender_id, "conversation_id": body.conversation_id},
+        {"player_id": current_player_id, "conversation_id": body.conversation_id},
         {"$set": {"last_read": now}},
         upsert=True,
     )
@@ -49,14 +51,14 @@ async def post_message(body: MessageBody):
         preview = "📷 Foto"
     else:
         preview = "📎 Datei"
-    await notify_new_message(body.scope, body.conversation_id, body.sender_id, p["name"], preview)
+    await notify_new_message(body.scope, body.conversation_id, current_player_id, p["name"], preview)
     return msg
 
 
 @router.post("/messages/read")
-async def mark_read(body: ReadBody):
+async def mark_read(body: ReadBody, current_player_id: CurrentPlayer):
     await db.reads.update_one(
-        {"player_id": body.player_id, "conversation_id": body.conversation_id},
+        {"player_id": current_player_id, "conversation_id": body.conversation_id},
         {"$set": {"last_read": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )
@@ -82,7 +84,8 @@ async def _last_msg(conversation_id: str):
 
 
 @router.get("/conversations")
-async def conversations(player_id: str):
+async def conversations(current_player_id: CurrentPlayer):
+    player_id = current_player_id
     team = {
         "conversation_id": "team",
         "last": await _last_msg("team"),
@@ -105,9 +108,10 @@ async def conversations(player_id: str):
 
 
 @router.get("/unread")
-async def unread_total(player_id: str):
+async def unread_total(current_player_id: CurrentPlayer):
     await check_and_send_birthdays()
     await check_and_send_rsvp_reminders()
+    player_id = current_player_id
     total = await _unread_for(player_id, "team")
     players = await db.players.find({"id": {"$ne": player_id}}, {"_id": 0, "id": 1}).to_list(500)
     for p in players:
@@ -116,8 +120,8 @@ async def unread_total(player_id: str):
 
 
 @router.post("/push/register")
-async def push_register(body: PushRegisterBody):
-    res = await db.players.update_one({"id": body.player_id}, {"$set": {"push_token": body.token}})
+async def push_register(body: PushRegisterBody, current_player_id: CurrentPlayer):
+    res = await db.players.update_one({"id": current_player_id}, {"$set": {"push_token": body.token}})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
     return {"ok": True}

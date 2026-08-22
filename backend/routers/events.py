@@ -4,6 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
+from auth import CoachPlayer, CurrentPlayer
 from config import CLUB
 from db import db
 from models import Event, EventCreate, EventPatch, EventsSeenBody
@@ -13,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/events", response_model=List[Event])
-async def get_events():
+async def get_events(_current: CurrentPlayer):
     # Never return soft-cancelled events (legacy data) — cancel now hard-deletes.
     docs = await db.events.find(
         {"$or": [{"cancelled": {"$exists": False}}, {"cancelled": False}]},
@@ -24,7 +25,7 @@ async def get_events():
 
 
 @router.post("/events", response_model=Event)
-async def create_event(body: EventCreate):
+async def create_event(body: EventCreate, _coach: CoachPlayer):
     if body.type not in ("Spiel", "Training", "Treffen"):
         raise HTTPException(status_code=400, detail="Ungültiger Typ")
     if not body.date or not body.time:
@@ -52,7 +53,7 @@ async def create_event(body: EventCreate):
 
 
 @router.patch("/events/{event_id}")
-async def update_event(event_id: str, body: EventPatch):
+async def update_event(event_id: str, body: EventPatch, _coach: CoachPlayer):
     ev = await db.events.find_one({"id": event_id})
     if not ev:
         raise HTTPException(status_code=404, detail="Termin nicht gefunden")
@@ -99,7 +100,7 @@ async def update_event(event_id: str, body: EventPatch):
 
 
 @router.post("/events/{event_id}/cancel")
-async def cancel_event(event_id: str):
+async def cancel_event(event_id: str, _coach: CoachPlayer):
     """Hard-delete an event. Sends a push first so players are still notified,
     then removes the event and all its attendance rows so the entry disappears
     from every client on the next fetch. Kept under /cancel to preserve the
@@ -114,7 +115,7 @@ async def cancel_event(event_id: str):
 
 
 @router.get("/events/{event_id}/overview")
-async def event_overview(event_id: str):
+async def event_overview(event_id: str, _current: CurrentPlayer):
     ev = await db.events.find_one({"id": event_id}, {"_id": 0})
     if not ev:
         raise HTTPException(status_code=404, detail="Termin nicht gefunden")
@@ -148,17 +149,17 @@ async def event_overview(event_id: str):
 
 
 @router.get("/events-unread")
-async def events_unread(player_id: str):
-    rd = await db.reads.find_one({"player_id": player_id, "conversation_id": "events"})
+async def events_unread(current_player_id: CurrentPlayer):
+    rd = await db.reads.find_one({"player_id": current_player_id, "conversation_id": "events"})
     last = rd["last_read"] if rd else ""
     n = await db.events.count_documents({"notify_at": {"$gt": last}})
     return {"total": n}
 
 
 @router.post("/events-seen")
-async def events_seen(body: EventsSeenBody):
+async def events_seen(current_player_id: CurrentPlayer):
     await db.reads.update_one(
-        {"player_id": body.player_id, "conversation_id": "events"},
+        {"player_id": current_player_id, "conversation_id": "events"},
         {"$set": {"last_read": datetime.now(timezone.utc).isoformat()}},
         upsert=True,
     )

@@ -112,7 +112,7 @@ export default function Termine() {
         return;
       }
       load();
-      api.eventsSeen(player.id).catch(() => {});
+      api.eventsSeen().catch(() => {});
     }, [player, load])
   );
 

@@ -45,8 +45,8 @@ export default function TabsLayout() {
     const poll = async () => {
       try {
         const [c, e] = await Promise.all([
-          api.unread(player.id),
-          api.eventsUnread(player.id),
+          api.unread(),
+          api.eventsUnread(),
         ]);
         if (active) {
           setUnread(c.total);

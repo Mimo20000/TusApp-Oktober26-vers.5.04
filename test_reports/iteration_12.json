@@ -1,0 +1,38 @@
+{
+  "summary": "Iter-12 security hardening verified end-to-end. 37/37 backend pytest cases pass covering SEC-001 (JWT 401 gate on 11 endpoints incl. /events/{id}/overview), SEC-002 (/contact owner+coach only, others 403), SEC-003 (bierwart/cashboxes/payments no longer accept spoofable actor_id/payer_id — token subject wins), SEC-004 (event hard-delete Coach-only, chat sender_id enforced from token), SEC-005 (anonymous /players returns no email/birthdate/jersey/avatar/spieler_id/password_hash while /players/full still exposes PII to authed callers), rate-limit (15/60s on login yields 429+Retry-After) and file safety (text/html upload served as application/octet-stream + Content-Disposition=attachment + X-Content-Type-Options=nosniff; /files/*/raw and /thumbnail 401 without auth). Frontend authed happy-path verified via Playwright at the preview URL: login as josh-ankermann → Termine tab loads (proves Bearer header on /events, /attendance), Team chat send appears in list, tus.token stored under AsyncStorage/localStorage, PII-stripped roster renders login picker with 'Neu' badge / lock icon only. Full storage wipe + reload correctly returns to login screen. One minor UX gap noted for main agent.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "src/api.ts req() 401 handler",
+        "issue": "When the stored token is invalid (not absent) and the app is reloaded, session.tsx hydrates as 'logged in' from tus.currentPlayerId + tus.token; the first /events call returns 401 and api.ts.secureRemove clears the token, but there is no re-render / navigation back to the login screen — the tab renders a permanent spinner. In dev mode a red-screen 'API 401' overlay appears from the un-caught fetch rejection. A full second reload IS required. Consider clearing tus.currentPlayerId+tus.currentPlayer alongside the token AND triggering session state refresh (e.g. calling session.logout() or setting an auth-invalid flag consumed by _layout) so the user bounces to login without a manual second reload.",
+        "testID": "login-screen",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_security.py",
+    "/app/test_reports/pytest/iter12.xml"
+  ],
+  "action_items": [
+    "Optional: in src/api.ts, on 401 also remove tus.currentPlayerId + tus.currentPlayer and dispatch a session-invalidated event/state update so the UI navigates to login without a manual page reload. Also catch/swallow the throw in top-level fetchers (termine/chat) so no red-screen overlay is shown in dev.",
+    "No other action items — all P0/P1 security fixes verified working end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "auth.py: throttle uses monotonic() + per-process in-memory deque — fine for single-worker uvicorn but will not survive horizontal scaling. Acceptable for current single-pod deployment.",
+    "players.py get_players: PII fields are popped after the query; also consider excluding them at the Mongo projection layer for defence in depth.",
+    "chat.py post_message: correctly overrides body.sender_id = current_player_id BEFORE using it — verified by pytest."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_security.py (new — 37 test cases)"
+  ],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "95% (login, Termine, Chat, PII roster, full-wipe reload → login all pass; minor UX gap on invalid-token reload)"},
+  "seed_data_creation": "No seed data added. One transient chat message and cashbox no-op patch during tests; contact-edit tests revert their marker.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend security regression file lives at /app/backend/tests/test_iter12_security.py — reuse for future auth changes. Auth key on web is localStorage['tus.token'] (JSON-encoded string), player id under localStorage['tus.currentPlayerId']. Coach = michael-moser, Bierwart cashbox recipient = sascha-grins. Rate limit is 15 login attempts / 60s per IP — flush a 65s wait between full rate-limit runs to avoid poisoning subsequent tests."
+}

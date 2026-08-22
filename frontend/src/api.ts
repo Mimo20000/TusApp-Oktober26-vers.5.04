@@ -1,4 +1,8 @@
+import { storage } from "@/src/utils/storage";
+
 const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
+const TOKEN_KEY = "tus.token";
+const PUBLIC_PATHS = new Set(["/players", "/holidays", "/league-table", "/"]);
 
 export type Player = {
   id: string;
@@ -36,16 +40,38 @@ export type TeamEvent = {
 export type Attendance = { event_id: string; player_id: string; status: string; reason?: string | null; driving?: boolean; beer?: boolean };
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const isAuthPath = /\/players\/[^/]+\/(login|set-password|forgot-password|reset-password)$/.test(
+    path
+  );
+  const skipAuth = isAuthPath || PUBLIC_PATHS.has(path);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  if (!skipAuth) {
+    try {
+      const token = await storage.secureGet<string | null>(TOKEN_KEY, null);
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    } catch {
+      // storage failure: proceed without token, server will 401
+    }
+  }
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  if (res.status === 401 && !skipAuth) {
+    // Session expired or missing — drop the token so the app falls back to login.
+    try {
+      await storage.secureRemove(TOKEN_KEY);
+      await storage.removeItem("tus.currentPlayerId");
+      await storage.removeItem("tus.currentPlayer");
+    } catch {}
+  }
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
 
 export const api = {
   players: () => req<Player[]>("/players"),
+  me: () => req<Player>("/players/me"),
   events: () => req<TeamEvent[]>("/events"),
   attendance: () => req<Attendance[]>("/attendance"),
   stats: () => req<StatsResponse>("/stats"),
@@ -114,28 +140,25 @@ export const api = {
   holidays: () => req<Holiday[]>("/holidays"),
   leagueTable: () => req<LeagueTable>("/league-table"),
   getBierwart: () => req<{ email: string }>("/settings/bierwart"),
-  setBierwart: (email: string, actor_id: string) =>
+  setBierwart: (email: string) =>
     req<{ ok: boolean; email: string }>("/settings/bierwart", {
       method: "PATCH",
-      body: JSON.stringify({ email, actor_id }),
+      body: JSON.stringify({ email }),
     }),
   cashboxes: () => req<Cashbox[]>("/cashboxes"),
   updateCashbox: (
     key: string,
-    body: { actor_id: string; email?: string; recipient_player_id?: string; label?: string }
+    body: { email?: string; recipient_player_id?: string; label?: string }
   ) =>
     req<Cashbox>(`/cashboxes/${key}`, { method: "PATCH", body: JSON.stringify(body) }),
   logPayment: (body: {
-    payer_id: string;
     cashbox_key: string;
     amount?: number;
     note?: string;
     event_id?: string;
   }) => req<Payment>("/payments", { method: "POST", body: JSON.stringify(body) }),
-  listPayments: (actor_id: string) =>
-    req<{ payments: Payment[]; sums: PaymentSum[] }>(
-      `/payments?actor_id=${encodeURIComponent(actor_id)}`
-    ),
+  listPayments: () =>
+    req<{ payments: Payment[]; sums: PaymentSum[] }>("/payments"),
   messages: (conversation_id: string) =>
     req<ChatMessage[]>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
   sendMessage: (
@@ -154,21 +177,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ player_id, conversation_id }),
     }),
-  conversations: (player_id: string) =>
-    req<Conversations>(`/conversations?player_id=${encodeURIComponent(player_id)}`),
-  unread: (player_id: string) =>
-    req<{ total: number }>(`/unread?player_id=${encodeURIComponent(player_id)}`),
-  eventsUnread: (player_id: string) =>
-    req<{ total: number }>(`/events-unread?player_id=${encodeURIComponent(player_id)}`),
-  eventsSeen: (player_id: string) =>
-    req<{ ok: boolean }>("/events-seen", {
-      method: "POST",
-      body: JSON.stringify({ player_id }),
-    }),
-  registerPush: (player_id: string, token: string) =>
+  conversations: () => req<Conversations>("/conversations"),
+  unread: () => req<{ total: number }>("/unread"),
+  eventsUnread: () => req<{ total: number }>("/events-unread"),
+  eventsSeen: () => req<{ ok: boolean }>("/events-seen", { method: "POST" }),
+  registerPush: (token: string) =>
     req<{ ok: boolean }>("/push/register", {
       method: "POST",
-      body: JSON.stringify({ player_id, token }),
+      body: JSON.stringify({ token }),
     }),
   setPassword: (player_id: string, password: string) =>
     req<AuthResponse>(`/players/${player_id}/set-password`, {

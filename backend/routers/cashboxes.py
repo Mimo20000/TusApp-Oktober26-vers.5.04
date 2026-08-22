@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from auth import CoachPlayer, CurrentPlayer
 from db import db
 
 router = APIRouter()
@@ -45,9 +46,6 @@ async def _is_coach(actor_id: str) -> bool:
 
 
 async def _can_view_payments(actor_id: str) -> bool:
-    """Coach OR any player who is currently listed as a cashbox recipient
-    (Bierwart, Mannschaftskassen-Verwalter, Trainer-Kasse) — everyone with
-    an operational responsibility for a cash box may see the full list."""
     if await _is_coach(actor_id):
         return True
     hit = await db.cashboxes.find_one({"recipient_player_id": actor_id})
@@ -65,14 +63,12 @@ async def _attach_recipient(box: dict) -> dict:
 
 
 class CashboxUpdate(BaseModel):
-    actor_id: str
     email: Optional[str] = None
     recipient_player_id: Optional[str] = None
     label: Optional[str] = None
 
 
 class PaymentCreate(BaseModel):
-    payer_id: str
     cashbox_key: str
     amount: Optional[float] = None
     note: Optional[str] = None
@@ -80,7 +76,7 @@ class PaymentCreate(BaseModel):
 
 
 @router.get("/cashboxes")
-async def list_cashboxes():
+async def list_cashboxes(_current: CurrentPlayer):
     docs = await db.cashboxes.find({}, {"_id": 0}).to_list(50)
     for d in docs:
         await _attach_recipient(d)
@@ -90,9 +86,7 @@ async def list_cashboxes():
 
 
 @router.patch("/cashboxes/{key}")
-async def update_cashbox(key: str, body: CashboxUpdate):
-    if not await _is_coach(body.actor_id):
-        raise HTTPException(status_code=403, detail="Nur der Trainer darf Kassen ändern.")
+async def update_cashbox(key: str, body: CashboxUpdate, coach_id: CoachPlayer):
     box = await db.cashboxes.find_one({"key": key})
     if not box:
         raise HTTPException(status_code=404, detail="Kasse nicht gefunden.")
@@ -111,29 +105,29 @@ async def update_cashbox(key: str, body: CashboxUpdate):
         upd["label"] = body.label.strip()
     if not upd:
         raise HTTPException(status_code=400, detail="Keine Änderungen.")
-    upd["updated_by"] = body.actor_id
+    upd["updated_by"] = coach_id
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.cashboxes.update_one({"key": key}, {"$set": upd})
     return await _attach_recipient({**box, **upd, "_id": None})
 
 
 @router.post("/payments")
-async def log_payment(body: PaymentCreate):
+async def log_payment(body: PaymentCreate, current_player_id: CurrentPlayer):
     box = await db.cashboxes.find_one({"key": body.cashbox_key})
     if not box:
         raise HTTPException(status_code=404, detail="Kasse nicht gefunden.")
-    payer = await db.players.find_one({"id": body.payer_id})
+    payer = await db.players.find_one({"id": current_player_id})
     if not payer:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden.")
     doc = {
         "id": "PAY" + uuid.uuid4().hex[:12],
         "cashbox_key": body.cashbox_key,
-        "payer_id": body.payer_id,
+        "payer_id": current_player_id,
         "payer_name": payer.get("name"),
         "amount": float(body.amount) if body.amount else None,
         "note": (body.note or "").strip() or None,
         "event_id": body.event_id,
-        "status": "open",  # flipped to "completed" when PayPal capture succeeds
+        "status": "open",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.payments.insert_one(dict(doc))
@@ -141,15 +135,14 @@ async def log_payment(body: PaymentCreate):
 
 
 @router.get("/payments")
-async def list_payments(actor_id: str):
-    if not await _can_view_payments(actor_id):
+async def list_payments(current_player_id: CurrentPlayer):
+    if not await _can_view_payments(current_player_id):
         raise HTTPException(status_code=403, detail="Nur Trainer und Kassenwarte dürfen Zahlungen einsehen.")
     docs = await db.payments.find({}, {"_id": 0}).to_list(2000)
     boxes = {b["key"]: b for b in await db.cashboxes.find({}, {"_id": 0}).to_list(50)}
     for d in docs:
         d["cashbox_label"] = boxes.get(d.get("cashbox_key"), {}).get("label") or d.get("cashbox_key")
     docs.sort(key=lambda p: p.get("created_at", ""), reverse=True)
-    # Summary per cashbox
     sums: dict = {}
     for d in docs:
         k = d.get("cashbox_key")

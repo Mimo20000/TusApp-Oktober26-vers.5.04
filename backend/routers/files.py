@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Response
 from PIL import Image
 
+from auth import CurrentPlayer
 from db import db
 from models import FileChunk, FileFinalize, FileInit
 
@@ -29,7 +30,7 @@ def _make_thumbnail(raw: bytes) -> bytes | None:
 
 
 @router.post("/files/init")
-async def files_init(body: FileInit):
+async def files_init(body: FileInit, _current: CurrentPlayer):
     upload_id = "UP" + uuid.uuid4().hex[:12]
     await db.uploads.insert_one({
         "upload_id": upload_id,
@@ -42,7 +43,7 @@ async def files_init(body: FileInit):
 
 
 @router.post("/files/chunk")
-async def files_chunk(body: FileChunk):
+async def files_chunk(body: FileChunk, _current: CurrentPlayer):
     up = await db.uploads.find_one({"upload_id": body.upload_id})
     if not up:
         raise HTTPException(status_code=404, detail="Upload nicht gefunden")
@@ -55,7 +56,7 @@ async def files_chunk(body: FileChunk):
 
 
 @router.post("/files/finalize")
-async def files_finalize(body: FileFinalize):
+async def files_finalize(body: FileFinalize, _current: CurrentPlayer):
     up = await db.uploads.find_one({"upload_id": body.upload_id})
     if not up:
         raise HTTPException(status_code=404, detail="Upload nicht gefunden")
@@ -102,8 +103,25 @@ async def files_finalize(body: FileFinalize):
     }
 
 
+SAFE_MIMES = {
+    "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic",
+    "application/pdf", "text/plain",
+    "application/zip",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
+def _safe_mime(mime: str | None) -> str:
+    if mime in SAFE_MIMES:
+        return mime
+    return "application/octet-stream"
+
+
 @router.get("/files/{file_id}/meta")
-async def files_meta(file_id: str):
+async def files_meta(file_id: str, _current: CurrentPlayer):
     f = await db.files.find_one({"id": file_id}, {"_id": 0, "data_b64": 0})
     if not f:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
@@ -111,20 +129,25 @@ async def files_meta(file_id: str):
 
 
 @router.get("/files/{file_id}/raw")
-async def files_raw(file_id: str):
+async def files_raw(file_id: str, _current: CurrentPlayer):
     f = await db.files.find_one({"id": file_id}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
     raw = base64.b64decode(f["data_b64"])
+    mime = _safe_mime(f.get("mime"))
+    # Force "attachment" for anything that isn't a whitelisted image, so a
+    # crafted upload can never be rendered inline as HTML/JS by the browser.
+    disposition = "inline" if mime.startswith("image/") else "attachment"
     headers = {
         "Cache-Control": "public, max-age=31536000",
-        "Content-Disposition": f'inline; filename="{f.get("filename", "datei")}"',
+        "Content-Disposition": f'{disposition}; filename="{f.get("filename", "datei")}"',
+        "X-Content-Type-Options": "nosniff",
     }
-    return Response(content=raw, media_type=f.get("mime") or "application/octet-stream", headers=headers)
+    return Response(content=raw, media_type=mime, headers=headers)
 
 
 @router.get("/files/{file_id}/thumbnail")
-async def files_thumbnail(file_id: str):
+async def files_thumbnail(file_id: str, _current: CurrentPlayer):
     """Return a small JPEG thumbnail for image files.
 
     Uses a Mongo-cached copy so we only generate the thumbnail once. Non-image

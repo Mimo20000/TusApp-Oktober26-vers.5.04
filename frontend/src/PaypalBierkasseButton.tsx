@@ -75,7 +75,6 @@ export default function PaypalBierkasseButton({
       try {
         const amt = amount.trim() ? parseFloat(amount.replace(",", ".")) : undefined;
         await api.logPayment({
-          payer_id: actorId,
           cashbox_key: selected.key,
           amount: amt && !isNaN(amt) ? amt : undefined,
           note: contextNote,
@@ -106,7 +105,6 @@ export default function PaypalBierkasseButton({
     setError(null);
     try {
       const res = await api.updateCashbox(editing.key, {
-        actor_id: actorId,
         email: editEmail.trim(),
         recipient_player_id: editPlayerId.trim() || undefined,
       });
