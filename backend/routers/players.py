@@ -142,7 +142,20 @@ async def update_player_contact(
     if body.birthdate is not None:
         upd["birthdate"] = body.birthdate.strip() or None
     if body.jersey_number is not None:
-        upd["jersey_number"] = body.jersey_number if body.jersey_number > 0 else None
+        new_jersey = body.jersey_number if body.jersey_number > 0 else None
+        # Uniqueness check: don't allow two players to share the same jersey.
+        # Only when a positive number is being assigned; clearing is fine.
+        if new_jersey is not None:
+            clash = await db.players.find_one(
+                {"jersey_number": new_jersey, "id": {"$ne": player_id}},
+                {"_id": 0, "id": 1, "name": 1},
+            )
+            if clash:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Trikotnummer {new_jersey} ist bereits an {clash.get('name')} vergeben.",
+                )
+        upd["jersey_number"] = new_jersey
     if body.avatar_file_id is not None:
         upd["avatar_file_id"] = body.avatar_file_id or None
     if body.spieler_id is not None:

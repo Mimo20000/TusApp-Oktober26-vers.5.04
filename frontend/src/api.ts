@@ -66,8 +66,19 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {}
   }
   if (!res.ok) {
-    const err = new Error(`API ${res.status}`) as Error & { status: number };
+    let detail: string | undefined;
+    try {
+      const body = await res.clone().json();
+      if (body && typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // non-JSON body — ignore
+    }
+    const err = new Error(detail || `API ${res.status}`) as Error & {
+      status: number;
+      detail?: string;
+    };
     err.status = res.status;
+    if (detail) err.detail = detail;
     throw err;
   }
   return res.json();

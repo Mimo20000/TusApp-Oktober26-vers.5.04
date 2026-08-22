@@ -44,11 +44,12 @@ type Props = {
   visible: boolean;
   player: Player | null;
   isAdmin: boolean;
+  roster?: Player[];
   onClose: () => void;
   onSaved: () => void;
 };
 
-export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onSaved }: Props) {
+export default function PlayerEditSheet({ visible, player, isAdmin, roster, onClose, onSaved }: Props) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
@@ -156,11 +157,13 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
       onSaved();
       onClose();
     } catch (e) {
-      const status = (e as { status?: number })?.status;
-      if (status === 401) {
+      const err = e as { status?: number; detail?: string };
+      if (err?.status === 401) {
         setError("Sitzung abgelaufen. Bitte erneut anmelden.");
-      } else if (status === 403) {
+      } else if (err?.status === 403) {
         setError("Nur der Trainer darf dies für andere Spieler ändern.");
+      } else if (err?.status === 409 && err.detail) {
+        setError(err.detail);
       } else {
         setError("Speichern fehlgeschlagen. Bitte erneut versuchen.");
       }
@@ -291,6 +294,26 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
                 inputMode="numeric"
                 maxLength={2}
               />
+              {(() => {
+                const taken = (roster ?? [])
+                  .filter((r) => r.id !== player?.id && r.jersey_number != null)
+                  .sort((a, b) => (a.jersey_number ?? 0) - (b.jersey_number ?? 0));
+                if (taken.length === 0) return null;
+                const current = jersey.trim() ? parseInt(jersey.trim(), 10) : null;
+                const clash = current != null ? taken.find((t) => t.jersey_number === current) : null;
+                return (
+                  <>
+                    <Text style={styles.hint} testID="jersey-taken-hint">
+                      Bereits vergeben: {taken.map((t) => t.jersey_number).join(", ")}
+                    </Text>
+                    {clash ? (
+                      <Text style={[styles.hint, { color: colors.error }]} testID="jersey-clash-warning">
+                        ⚠️ Nr. {clash.jersey_number} gehört {clash.name}. Bitte andere wählen.
+                      </Text>
+                    ) : null}
+                  </>
+                );
+              })()}
 
               <Text style={styles.label}>SpielerID (SL)</Text>
               <TextInput

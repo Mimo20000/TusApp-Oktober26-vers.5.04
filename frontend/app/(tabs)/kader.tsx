@@ -202,6 +202,7 @@ export default function Kader() {
         visible={!!editing}
         player={editing}
         isAdmin={isAdmin}
+        roster={players}
         onClose={() => setEditing(null)}
         onSaved={load}
       />
