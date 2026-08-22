@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
-import { Alert, Linking } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 
 export type PickedFile = {
   base64: string;
@@ -11,6 +11,9 @@ export type PickedFile = {
 };
 
 async function ensurePhotoPermission(): Promise<boolean> {
+  // Web browsers use a native <input type="file"> and don't need any Expo
+  // media-library permission — asking would just show a confusing dialog.
+  if (Platform.OS === "web") return true;
   const current = await ImagePicker.getMediaLibraryPermissionsAsync();
   let status = current.status;
   if (status !== "granted" && current.canAskAgain) {
@@ -42,11 +45,34 @@ export async function pickImageFile(): Promise<PickedFile | null> {
   const a = res.assets[0];
   let base64 = a.base64 ?? "";
   if (!base64) {
-    base64 = await new File(a.uri).base64();
+    // Web fallback: expo-file-system's File API doesn't run in the browser,
+    // so read the picked blob via `fetch(uri)` → arrayBuffer → base64.
+    if (Platform.OS === "web") {
+      try {
+        const r = await fetch(a.uri);
+        const buf = await r.arrayBuffer();
+        base64 = arrayBufferToBase64(buf);
+      } catch (e) {
+        console.warn("[media] web base64 read failed", e);
+        return null;
+      }
+    } else {
+      base64 = await new File(a.uri).base64();
+    }
   }
   const mime = a.mimeType || "image/jpeg";
   const filename = a.fileName || `foto_${Date.now()}.jpg`;
   return { base64, mime, filename, kind: "image" };
+}
+
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 0x8000; // 32 KB per btoa call to stay well below stack limits
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(binary);
 }
 
 export async function pickDocumentFile(): Promise<PickedFile | null> {

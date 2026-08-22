@@ -20,6 +20,7 @@ import * as Haptics from "expo-haptics";
 import { colors, spacing, radius, font, statusColor } from "@/src/theme";
 import { api, Player } from "@/src/api";
 import { pickImageFile } from "@/src/media";
+import WebDateInput from "@/src/components/WebDateInput";
 
 const STATUS_OPTIONS: ("Aktiv" | "Verletzt" | "Inaktiv")[] = ["Aktiv", "Verletzt", "Inaktiv"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -108,8 +109,18 @@ export default function PlayerEditSheet({ visible, player, isAdmin, roster, onCl
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       const res = await api.uploadFile(picked.base64, picked.filename, picked.mime, "image");
       setAvatarFileId(res.file_id);
-    } catch {
-      setError("Foto konnte nicht hochgeladen werden.");
+    } catch (e) {
+      const err = e as { status?: number; detail?: string; message?: string };
+      if (err?.status === 413) {
+        setError("Foto ist zu groß (max. 15 MB).");
+      } else if (err?.status === 401) {
+        setError("Sitzung abgelaufen. Bitte erneut anmelden.");
+      } else if (err?.detail) {
+        setError(err.detail);
+      } else {
+        setError("Foto konnte nicht hochgeladen werden. Versuche es erneut.");
+      }
+      console.warn("[choosePhoto] upload failed", e);
     } finally {
       setUploadingPhoto(false);
     }
@@ -267,13 +278,12 @@ export default function PlayerEditSheet({ visible, player, isAdmin, roster, onCl
 
               <Text style={styles.label}>Geburtsdatum</Text>
               {Platform.OS === "web" ? (
-                <TextInput
+                <WebDateInput
                   testID="input-birthdate"
-                  style={styles.input}
                   value={birthdate}
-                  onChangeText={setBirthdate}
-                  placeholder="JJJJ-MM-TT"
-                  placeholderTextColor={colors.muted}
+                  onChange={setBirthdate}
+                  min="1940-01-01"
+                  max={new Date().toISOString().slice(0, 10)}
                 />
               ) : (
                 <Pressable testID="pick-birthdate" style={styles.pickBtn} onPress={() => setShowDate(true)}>
