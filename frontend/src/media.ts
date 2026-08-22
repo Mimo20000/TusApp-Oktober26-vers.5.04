@@ -38,8 +38,12 @@ export async function pickImageFile(): Promise<PickedFile | null> {
   if (!(await ensurePhotoPermission())) return null;
   const res = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
-    quality: 0.6,
+    quality: 0.7,
     base64: true,
+    // Native iOS/Android show a nice square crop UI when this is enabled.
+    // Web ignores these two options — we handle web cropping via PhotoCropperModal.
+    allowsEditing: Platform.OS !== "web",
+    aspect: [1, 1],
   });
   if (res.canceled || !res.assets?.length) return null;
   const a = res.assets[0];

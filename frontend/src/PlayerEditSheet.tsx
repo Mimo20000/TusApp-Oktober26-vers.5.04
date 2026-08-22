@@ -21,6 +21,7 @@ import { colors, spacing, radius, font, statusColor } from "@/src/theme";
 import { api, Player } from "@/src/api";
 import { pickImageFile } from "@/src/media";
 import WebDateInput from "@/src/components/WebDateInput";
+import PhotoCropperModal from "@/src/components/PhotoCropperModal";
 
 const STATUS_OPTIONS: ("Aktiv" | "Verletzt" | "Inaktiv")[] = ["Aktiv", "Verletzt", "Inaktiv"];
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -65,6 +66,10 @@ export default function PlayerEditSheet({ visible, player, isAdmin, roster, onCl
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cropperInput, setCropperInput] = useState<
+    | { base64: string; mime: string; filename: string }
+    | null
+  >(null);
 
   useEffect(() => {
     if (player) {
@@ -104,10 +109,28 @@ export default function PlayerEditSheet({ visible, player, isAdmin, roster, onCl
     try {
       const picked = await pickImageFile();
       if (!picked) return;
+      // On web, open our custom circle cropper so every avatar has the same
+      // framing; on native, ImagePicker's built-in square crop already ran
+      // during pickImageFile, so we upload directly.
+      if (Platform.OS === "web") {
+        setCropperInput({ base64: picked.base64, mime: picked.mime, filename: picked.filename });
+      } else {
+        await uploadPickedPhoto(picked.base64, picked.mime, picked.filename);
+      }
+    } catch (e) {
+      const err = e as { status?: number; detail?: string; message?: string };
+      if (err?.detail) setError(err.detail);
+      else setError("Foto konnte nicht ausgewählt werden.");
+      console.warn("[choosePhoto] pick failed", e);
+    }
+  };
+
+  const uploadPickedPhoto = async (base64: string, mime: string, filename: string) => {
+    try {
       setUploadingPhoto(true);
       setError(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const res = await api.uploadFile(picked.base64, picked.filename, picked.mime, "image");
+      const res = await api.uploadFile(base64, filename, mime, "image");
       setAvatarFileId(res.file_id);
     } catch (e) {
       const err = e as { status?: number; detail?: string; message?: string };
@@ -417,6 +440,18 @@ export default function PlayerEditSheet({ visible, player, isAdmin, roster, onCl
           }}
         />
       )}
+
+      <PhotoCropperModal
+        visible={!!cropperInput}
+        base64={cropperInput?.base64 ?? ""}
+        mime={cropperInput?.mime ?? "image/jpeg"}
+        onCancel={() => setCropperInput(null)}
+        onConfirm={async (out) => {
+          const filename = cropperInput?.filename ?? `foto_${Date.now()}.jpg`;
+          setCropperInput(null);
+          await uploadPickedPhoto(out.base64, out.mime, filename);
+        }}
+      />
     </Modal>
   );
 }

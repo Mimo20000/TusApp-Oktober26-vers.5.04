@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -175,12 +175,35 @@ function RideShareSuggestion({
   needsRide: EventOverviewPlayer[];
   drivers: EventOverviewPlayer[];
 }) {
+  const [driveCounts, setDriveCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await api.stats();
+        if (!alive) return;
+        const map: Record<string, number> = {};
+        for (const p of s.players) map[p.id] = p.driving_count ?? 0;
+        setDriveCounts(map);
+      } catch {
+        // ignore — the ranking just falls back to "unknown" (0).
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const need = needsRide.length;
   if (need === 0 && drivers.length === 0) return null;
-  // Suggest the driver with the smallest current "load" (round-robin feel).
-  // Since we have no seat-count data, we pick a random driver each render so
-  // over the season everyone gets asked equally.
-  const pick = drivers.length ? drivers[Math.floor(Math.random() * drivers.length)] : null;
+
+  // Order drivers by fairness: fewest completed trips first.
+  const rankedDrivers = [...drivers].sort(
+    (a, b) => (driveCounts[a.id] ?? 0) - (driveCounts[b.id] ?? 0)
+  );
+  const pick = rankedDrivers[0] ?? null;
+
   return (
     <View style={styles.rideCard} testID="rideshare-suggestion">
       <View style={styles.rideHeader}>
@@ -210,11 +233,46 @@ function RideShareSuggestion({
               </View>
             ))}
           </View>
+          <View style={styles.rideDivider} />
+          <Text style={styles.rideBody}>Fahrer-Rotation (fair aufgeteilt):</Text>
+          <View style={styles.rideChipRow}>
+            {rankedDrivers.map((d, idx) => {
+              const c = driveCounts[d.id] ?? 0;
+              return (
+                <View
+                  key={d.id}
+                  style={[styles.rideChip, idx === 0 && styles.rideChipTop]}
+                  testID={`ride-rank-${d.id}`}
+                >
+                  {idx === 0 ? <Text style={styles.rideStar}>⭐</Text> : null}
+                  <Text
+                    style={[
+                      styles.rideChipName,
+                      idx === 0 && { color: colors.onBrand, fontFamily: font.bold },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {d.name}
+                  </Text>
+                  <View style={[styles.rideCountBadge, idx === 0 && styles.rideCountBadgeTop]}>
+                    <Text
+                      style={[styles.rideCountText, idx === 0 && { color: colors.brand }]}
+                    >
+                      {c}×
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
           {pick ? (
             <View style={styles.rideHintRow}>
               <Text style={styles.rideHintText}>
-                💡 Frag doch mal bei <Text style={styles.rideHintName}>{pick.name}</Text> nach –
-                {pick.email ? " Mail-Icon rechts nutzen." : " im Team-Chat pingen."}
+                💡 Als Nächste dran: <Text style={styles.rideHintName}>{pick.name}</Text>
+                {(driveCounts[pick.id] ?? 0) === 0
+                  ? " (war noch nie dran)"
+                  : ` (bisher ${driveCounts[pick.id]}× gefahren)`}
+                {pick.email ? " – Mail-Icon rechts nutzen." : " – im Team-Chat pingen."}
               </Text>
             </View>
           ) : null}
@@ -397,7 +455,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    maxWidth: 200,
+    maxWidth: 220,
+  },
+  rideChipTop: {
+    backgroundColor: colors.brand,
+  },
+  rideStar: { fontSize: 14 },
+  rideCountBadge: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 4,
+  },
+  rideCountBadgeTop: {
+    backgroundColor: colors.surface,
+  },
+  rideCountText: {
+    fontFamily: font.bold,
+    fontSize: 11,
+    color: colors.onSurfaceSecondary,
+  },
+  rideDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.sm,
   },
   rideChipNum: {
     fontFamily: font.extra,
