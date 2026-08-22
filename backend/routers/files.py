@@ -129,7 +129,16 @@ async def files_meta(file_id: str, _current: CurrentPlayer):
 
 
 @router.get("/files/{file_id}/raw")
-async def files_raw(file_id: str, _current: CurrentPlayer):
+async def files_raw(file_id: str):
+    """Return the raw file bytes.
+
+    Files use random 16-hex IDs and are only referenced from authenticated
+    endpoints (`/players` for avatars, `/messages` for chat attachments), so
+    an anonymous caller can only fetch a file if they already know an ID. We
+    still keep the response non-executable via strong `Content-Disposition`
+    and `X-Content-Type-Options`. Auth is removed here because the browser's
+    native `<Image>` cannot attach a JWT header when it loads the src URL.
+    """
     f = await db.files.find_one({"id": file_id}, {"_id": 0})
     if not f:
         raise HTTPException(status_code=404, detail="Datei nicht gefunden")
@@ -147,11 +156,12 @@ async def files_raw(file_id: str, _current: CurrentPlayer):
 
 
 @router.get("/files/{file_id}/thumbnail")
-async def files_thumbnail(file_id: str, _current: CurrentPlayer):
+async def files_thumbnail(file_id: str):
     """Return a small JPEG thumbnail for image files.
 
-    Uses a Mongo-cached copy so we only generate the thumbnail once. Non-image
-    files fall back to the raw response so callers can use one URL everywhere.
+    Public for the same reason as `/files/{id}/raw` — the browser's `<Image>`
+    element cannot attach an Authorization header when it loads the URL, and
+    file IDs are unguessable random hex strings.
     """
     f = await db.files.find_one({"id": file_id}, {"_id": 0})
     if not f:

@@ -14,6 +14,8 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - 12 games (Spiel) Oct 2026–Apr 2027 + weekly Thursday 19:00 trainings from today through 2031 + coach-added Treffen.
 
 ## Fixed (2026-08, v3.0.1)
+- [x] **KRITISCH: Fotos wurden gespeichert aber nicht in der Kader-Liste angezeigt**: `GET /files/{id}/raw` und `GET /files/{id}/thumbnail` verlangten JWT-Auth, aber der Browser-`<Image>` kann keine `Authorization`-Header setzen → 401 → leerer Kreis in der Kader-Liste. Neu: beide Endpunkte sind wieder öffentlich zugänglich. Sicherheit bleibt bestehen, da File-IDs 16-Zeichen-Random-Hex sind und nur über authentifizierte Endpunkte (`/players`, `/messages`) referenziert werden. Zusätzlich `Content-Disposition` + `X-Content-Type-Options: nosniff` gegen inline-XSS.
+- [x] **Foto-Zuschnitt-Editor mit Kreis-Maske**: siehe Implemented-Sektion.
 - [x] **Geburtsdatum jetzt per Kalender + europäisches Format**: Neue `WebDateInput`-Komponente rendert im PWA/Web `<input type="date">` mit `lang="de-DE"` und zeigt zusätzlich eine große DD.MM.YYYY-Vorschau darüber ("14.05.1990"). Auf iOS/Android wird weiterhin der native `DateTimePicker` genutzt. ISO-Format bleibt intern für Backend-Roundtrip.
 - [x] **Foto-Upload im Web funktioniert wieder**: Der überflüssige `MediaLibrary`-Permission-Check in `src/media.ts` blockierte den Datei-Picker in Browsern; auf `Platform.OS === "web"` wird der Check jetzt übersprungen. Fallback für fehlendes Base64: `fetch(uri) → arrayBuffer → base64`. Bessere Fehlermeldungen im Edit-Sheet: 413 (zu groß), 401 (Session), Server-Detail.
 - [x] **Fahrer-Rotation im Overview** (WIP – wird als nächstes fertiggestellt)
