@@ -73,7 +73,7 @@ export default function AbsageReasonModal({ visible, initial, onCancel, onSubmit
               <Text style={styles.title}>Grund für die Absage</Text>
             </View>
             <Text style={styles.body}>
-              Damit der Trainer die Aufstellung planen kann, brauchen wir einen kurzen Grund.
+              Damit Trainer und Bierwart die Aufstellung planen können, brauchen wir einen kurzen Grund.
               Dieses Feld ist Pflicht.
             </Text>
             <TextInput

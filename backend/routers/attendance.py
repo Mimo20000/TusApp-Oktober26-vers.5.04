@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from db import db
 from models import BeerBody, DrivingBody, RSVP
-from push import notify_new_message
+from push import direct_conv_id, notify_new_message
 
 router = APIRouter()
 
@@ -39,6 +39,51 @@ async def _announce_team(player: dict, text: str):
     await notify_new_message("team", "team", player["id"], player["name"], text)
 
 
+async def _dm_coach_absage(player: dict, event: dict, reason: str) -> None:
+    """When a player cancels an event, ping every Coach with a direct message.
+
+    Skips when the sender is the Coach themselves (no self-ping). Idempotent
+    by (event, player) — replaces the previous auto-ping in the same 1:1
+    conversation so the coach's inbox doesn't spam on quick re-edits.
+    """
+    coaches = await db.players.find(
+        {"position": "Coach", "id": {"$ne": player["id"]}}, {"_id": 0}
+    ).to_list(50)
+    if not coaches:
+        return
+    kind = event.get("type") or "Termin"
+    opp = event.get("opponent")
+    title = f"Spiel gegen {opp}" if kind == "Spiel" and opp else kind
+    date_de = _fmt_date(event.get("date") or "")
+    time_s = event.get("time") or ""
+    when = f"{date_de} um {time_s} Uhr" if time_s else date_de
+    text = f"❌ {player.get('name')} hat abgesagt: {title} am {when}\nGrund: {reason}"
+    for coach in coaches:
+        cid = direct_conv_id(player["id"], coach["id"])
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # Update-or-insert the auto-ping message so repeated absage edits by
+        # the same player for the same event don't spam the coach's chat.
+        marker_id = f"absage:{event['id']}:{player['id']}:{coach['id']}"
+        await db.messages.update_one(
+            {"id": marker_id},
+            {
+                "$set": {
+                    "id": marker_id,
+                    "conversation_id": cid,
+                    "scope": "direct",
+                    "sender_id": player["id"],
+                    "sender_name": player["name"],
+                    "text": text,
+                    "created_at": now_iso,
+                }
+            },
+            upsert=True,
+        )
+        await notify_new_message(
+            "direct", cid, player["id"], player.get("name") or "", text
+        )
+
+
 @router.get("/attendance")
 async def get_attendance():
     docs = await db.attendance.find({}, {"_id": 0}).to_list(5000)
@@ -52,8 +97,10 @@ async def set_rsvp(rsvp: RSVP):
     reason = (rsvp.reason or "").strip()
     if rsvp.status == "abgesagt" and not reason:
         raise HTTPException(status_code=400, detail="Bitte gib einen Grund für die Absage an.")
+
+    prev = await db.attendance.find_one({"event_id": rsvp.event_id, "player_id": rsvp.player_id})
+
     upd = {"status": rsvp.status, "updated_at": datetime.now(timezone.utc).isoformat()}
-    # Only persist the reason for absagen; clear it when the player later switches to zugesagt.
     if rsvp.status == "abgesagt":
         upd["reason"] = reason
     else:
@@ -63,6 +110,18 @@ async def set_rsvp(rsvp: RSVP):
         {"$set": upd},
         upsert=True,
     )
+
+    # Auto-DM the coach whenever a player absagt (fresh or reason changed).
+    # Skip when nothing user-visible changed to avoid duplicate pings.
+    if rsvp.status == "abgesagt":
+        prev_status = (prev or {}).get("status")
+        prev_reason = (prev or {}).get("reason") or ""
+        if prev_status != "abgesagt" or prev_reason != reason:
+            player = await db.players.find_one({"id": rsvp.player_id})
+            event = await db.events.find_one({"id": rsvp.event_id})
+            if player and event:
+                await _dm_coach_absage(player, event, reason)
+
     return {
         "ok": True,
         "event_id": rsvp.event_id,
