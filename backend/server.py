@@ -7,7 +7,8 @@ from db import client
 from seed import seed_if_empty
 from birthday import check_and_send_birthdays
 from reminders import check_and_send_rsvp_reminders
-from routers import attendance, chat, events, files, misc, players, stats
+from routers import attendance, chat, events, files, misc, players, stats, cashboxes
+from routers.cashboxes import seed_cashboxes_if_empty
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ api_router.include_router(attendance.router)
 api_router.include_router(stats.router)
 api_router.include_router(chat.router)
 api_router.include_router(files.router)
+api_router.include_router(cashboxes.router)
 
 app.include_router(api_router)
 
@@ -37,6 +39,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await seed_if_empty()
+    await seed_cashboxes_if_empty()
     await check_and_send_birthdays()
     await check_and_send_rsvp_reminders()
 

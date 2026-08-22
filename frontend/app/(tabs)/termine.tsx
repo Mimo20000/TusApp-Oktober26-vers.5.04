@@ -45,7 +45,6 @@ export default function Termine() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [driving, setDriving] = useState<Record<string, boolean>>({});
   const [beer, setBeer] = useState<Record<string, boolean>>({});
-  const [bierwartEmail, setBierwartEmail] = useState<string>("lj-sascha@web.de");
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingAbsage, setPendingAbsage] = useState<TeamEvent | null>(null);
 
@@ -78,15 +77,13 @@ export default function Termine() {
 
   const load = useCallback(async () => {
     try {
-      const [ev, attList, hol, bw] = await Promise.all([
+      const [ev, attList, hol] = await Promise.all([
         api.events(),
         api.attendance(),
         api.holidays().catch(() => [] as Holiday[]),
-        api.getBierwart().catch(() => ({ email: "lj-sascha@web.de" })),
       ]);
       setEvents(ev);
       setHolidays(hol);
-      setBierwartEmail(bw.email || "lj-sascha@web.de");
       const mine: Record<string, string> = {};
       const mineDrive: Record<string, boolean> = {};
       const mineBeer: Record<string, boolean> = {};
@@ -270,9 +267,7 @@ export default function Termine() {
                   driving={!!driving[it.event.id]}
                   beer={!!beer[it.event.id]}
                   isAdmin={isAdmin}
-                  bierwartEmail={bierwartEmail}
                   actorId={player?.id}
-                  onBierwartChanged={setBierwartEmail}
                   onEdit={() => setEditEvent(it.event)}
                   onOverview={() => router.push(`/event/${it.event.id}`)}
                   onZusagen={() => rsvp(it.event.id, "zugesagt")}

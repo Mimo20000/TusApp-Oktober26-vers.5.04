@@ -118,6 +118,23 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ email, actor_id }),
     }),
+  cashboxes: () => req<Cashbox[]>("/cashboxes"),
+  updateCashbox: (
+    key: string,
+    body: { actor_id: string; email?: string; recipient_player_id?: string; label?: string }
+  ) =>
+    req<Cashbox>(`/cashboxes/${key}`, { method: "PATCH", body: JSON.stringify(body) }),
+  logPayment: (body: {
+    payer_id: string;
+    cashbox_key: string;
+    amount?: number;
+    note?: string;
+    event_id?: string;
+  }) => req<Payment>("/payments", { method: "POST", body: JSON.stringify(body) }),
+  listPayments: (actor_id: string) =>
+    req<{ payments: Payment[]; sums: PaymentSum[] }>(
+      `/payments?actor_id=${encodeURIComponent(actor_id)}`
+    ),
   messages: (conversation_id: string) =>
     req<ChatMessage[]>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
   sendMessage: (
@@ -200,6 +217,35 @@ export const api = {
 };
 
 export type AuthResponse = { access_token: string; player_id: string };
+
+export type Cashbox = {
+  key: string;
+  label: string;
+  email: string;
+  recipient_player_id?: string | null;
+  recipient_name?: string | null;
+  recipient_avatar_file_id?: string | null;
+};
+
+export type Payment = {
+  id: string;
+  cashbox_key: string;
+  cashbox_label?: string;
+  payer_id: string;
+  payer_name?: string;
+  amount?: number | null;
+  note?: string | null;
+  event_id?: string | null;
+  status: "open" | "completed";
+  created_at: string;
+};
+
+export type PaymentSum = {
+  cashbox_key: string;
+  cashbox_label: string;
+  total: number;
+  count: number;
+};
 
 export type EventOverviewPlayer = {
   id: string;

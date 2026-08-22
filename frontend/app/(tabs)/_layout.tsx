@@ -11,6 +11,29 @@ export default function TabsLayout() {
   const { player } = useSession();
   const [unread, setUnread] = useState(0);
   const [eventsUnread, setEventsUnread] = useState(0);
+  const [canSeeKasse, setCanSeeKasse] = useState(false);
+
+  useEffect(() => {
+    if (!player) return;
+    let cancelled = false;
+    const check = async () => {
+      if (player.position === "Coach") {
+        if (!cancelled) setCanSeeKasse(true);
+        return;
+      }
+      try {
+        const boxes = await api.cashboxes();
+        if (cancelled) return;
+        setCanSeeKasse(boxes.some((b) => b.recipient_player_id === player.id));
+      } catch {
+        if (!cancelled) setCanSeeKasse(false);
+      }
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [player?.id, player?.position]);
 
   useEffect(() => {
     if (!player) return;
@@ -97,6 +120,14 @@ export default function TabsLayout() {
         options={{
           title: "Tabelle",
           tabBarIcon: ({ color, size }) => <Ionicons name="podium" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="zahlungen"
+        options={{
+          title: "Kasse",
+          href: canSeeKasse ? undefined : null,
+          tabBarIcon: ({ color, size }) => <Ionicons name="cash" size={size} color={color} />,
         }}
       />
     </Tabs>

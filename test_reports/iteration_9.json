@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 8 (cashboxes + payments) — Backend 16/16 pass, Frontend flows fully verified. All 4 cashboxes seeded and returned in correct order (bierwart, mannschaft_spiele, mannschaft_training, trainer). PATCH RBAC + validation works. POST/GET /api/payments works with coach-only listing. Frontend: Kasse tab hidden for non-Coach (Josh), visible for Coach (Michael). PaypalBierkasseButton opens cashbox picker with all 4 rows, amount input, PayPal deep-link (opens https://www.paypal.com/myaccount/transfer/send), POST /api/payments logged with correct payload, disabled CTA when box has no email, cashbox-edit-* only visible to Coach, PATCH /api/cashboxes/{key} works. Coach Zahlungen tab renders summary + verlauf with the persisted row. No blocking issues; note: cleanup of test data was performed via direct Mongo.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter8_cashboxes.py",
+    "/app/test_reports/pytest/iter8_cashboxes.xml"
+  ],
+  "action_items": [
+    "OPTIONAL polish: when PATCH /api/cashboxes/{key} succeeds, backend returns the updated doc but sets recipient_name only if updated_by-based lookup succeeds — verify UI refresh shows new recipient_name (currently works because response is spread into local state, but a full re-fetch would be safer).",
+    "OPTIONAL polish: the cashbox picker uses raw player_id as the edit input — a picker/dropdown of team players would be more user friendly than free-text ID.",
+    "No PayPal API integration yet — status remains 'open' as expected; add capture callback in a future iteration to flip to 'completed'."
+  ],
+  "critical_code_review_comments": [
+    "routers/cashboxes.py returns the updated cashbox by merging {**box, **upd, '_id': None} — the '_id': None key is harmless in the response but noisy; consider popping it or projecting {_id:0} on the find_one call.",
+    "PaypalBierkasseButton.tsx: window.open URL is hardcoded to the PayPal transfer page but does not pre-fill recipient (email is copied to clipboard as a workaround). Once PayPal SDK/keys arrive, replace with a proper PayPal SDK deep-link that carries the email + amount.",
+    "cashbox-edit-player accepts free-text player_id — invalid IDs are caught by the backend (400 'Spieler nicht gefunden.') but a picker of team players would be more user-friendly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter8_cashboxes.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Backend seeds 4 default cashboxes on startup if empty. Test-created payments were cleaned up via Mongo delete_many. Coach password_hash was cleared and re-set to 'pw12345' during testing; email set to mm@test.de.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Coach michael-moser password is now 'pw12345' (was unknown before). All 4 default cashboxes exist in Mongo (bierwart -> sascha-grins/lj-sascha@web.de, mannschaft_spiele empty, mannschaft_training empty, trainer -> michael-moser without email). No payments remain. Test file /app/backend/tests/test_iter8_cashboxes.py runs cleanly and cleans up its own data.",
+  "rca_of_issue": "N/A — no bugs found."
+}

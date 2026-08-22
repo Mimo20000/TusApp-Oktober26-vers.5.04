@@ -26,9 +26,7 @@ type Props = {
   driving: boolean;
   beer: boolean;
   isAdmin: boolean;
-  bierwartEmail: string;
   actorId?: string;
-  onBierwartChanged?: (email: string) => void;
   onEdit: () => void;
   onOverview: () => void;
   onZusagen: () => void;
@@ -44,9 +42,7 @@ export default function EventCard({
   driving,
   beer,
   isAdmin,
-  bierwartEmail,
   actorId,
-  onBierwartChanged,
   onEdit,
   onOverview,
   onZusagen,
@@ -214,11 +210,10 @@ export default function EventCard({
               <View style={styles.paypalRow}>
                 <PaypalBierkasseButton
                   testID={`paypal-${event.id}`}
-                  email={bierwartEmail}
                   actorId={actorId}
                   isAdmin={isAdmin}
-                  onEmailChanged={onBierwartChanged}
-                  contextNote={`${d.day}.${d.month}`}
+                  contextNote={`${event.type} ${d.day}.${d.month}`}
+                  eventId={event.id}
                   compact
                 />
               </View>
@@ -240,11 +235,10 @@ export default function EventCard({
               <View style={styles.paypalRow}>
                 <PaypalBierkasseButton
                   testID={`paypal-${event.id}`}
-                  email={bierwartEmail}
                   actorId={actorId}
                   isAdmin={isAdmin}
-                  onEmailChanged={onBierwartChanged}
-                  contextNote={`${d.day}.${d.month}`}
+                  contextNote={`${event.type} ${d.day}.${d.month}`}
+                  eventId={event.id}
                   compact
                 />
               </View>

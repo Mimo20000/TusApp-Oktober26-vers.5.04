@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 10 (Kasse visibility extended to cashbox recipients) — Backend 6/6 pass, Frontend 3/3 flows verified. GET /api/payments now allows Coach OR any player currently listed as a cashbox recipient_player_id; regular non-recipients receive HTTP 403 with detail 'Nur Trainer und Kassenwarte dürfen Zahlungen einsehen.'. PATCH cascading works: switching bierwart.recipient_player_id from sascha-grins to josh-ankermann grants josh access and revokes sascha's; reset restores the original state. Frontend tabs: Sascha (Bierwart) sees the 'Kasse' tab and lands on the Zahlungen screen with subtitle 'Übersicht aller PayPal-Zahlungen' (no 403 lockout). Filip (regular) has NO Kasse tab. Coach Michael still sees the Kasse tab and full payments overview. Regression: version 3.0 pill count = 1 on login (verified for all three logins).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_payments_rbac.py",
+    "/app/test_reports/pytest/iter10.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: add a testID to each Tabs.Screen tab bar item (e.g. tab-zahlungen) — currently the only reliable web selector is the anchor href, and 'Kasse' as text collides with the per-event PaypalBierkasseButton on Termine cards.",
+    "OPTIONAL: /api/payments already returns previously created test payments (Michael MOSER → Bierwart 0,00 € · Training 3.Sept, status=open). Consider seed cleanup or expose a Coach-only delete endpoint for stale test data."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/cashboxes.py:_can_view_payments — Coach shortcut + recipient_player_id lookup is correct; also implicitly handles Trainer-Kasse recipient (michael-moser) so no double role check needed.",
+    "frontend/app/(tabs)/_layout.tsx polls /api/cashboxes once per session but only when player.id or player.position changes. If the Coach reassigns a cashbox while the recipient is already logged in, the newly-added recipient will not see the Kasse tab until they log out and back in (or trigger a screen reload). Not blocking but worth documenting or adding a short interval refresh.",
+    "frontend/app/(tabs)/zahlungen.tsx probes via api.listPayments and only shows the 403 lockout after failure; the network call still leaks the actor_id in the URL. This is acceptable for the current threat model."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_payments_rbac.py (new)",
+    "/app/memory/test_credentials.md (added sascha-grins and filip-la creds — both now have password 'test1234')"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (3/3 flows)"},
+  "seed_data_creation": "Set passwords for sascha-grins and filip-la (both were has_password=false) via POST /api/players/{id}/set-password with password 'test1234' and PATCH /api/players/{id}/contact with placeholder emails (sascha@test.de, filip@test.de). Bierwart cashbox left at recipient_player_id=sascha-grins (verified). One stale test payment (Michael → Bierwart, 0,00 €, status=open, from prior iteration) remains in the payments collection.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "sascha-grins password = test1234 (email sascha@test.de). filip-la password = test1234 (email filip@test.de). Coach michael-moser still 'pw12345'. To reproduce Kasse-tab visibility from Playwright, use a[href*='/zahlungen'] (count 1 for allowed users, 0 for denied) — do NOT use get_by_text('Kasse') because each Spiele/Training event card renders a 'Kasse' button (PaypalBierkasseButton). Bierwart cashbox is currently pointed at sascha-grins.",
+  "rca_of_issue": "N/A — feature verification only, no bugs found."
+}
