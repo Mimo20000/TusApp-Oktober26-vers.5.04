@@ -26,6 +26,7 @@ import { buildIcs } from "@/src/ics";
 import EventCard from "@/src/components/EventCard";
 import HolidayInsert from "@/src/components/HolidayInsert";
 import EmptyState from "@/src/components/EmptyState";
+import HighlightsCard from "@/src/components/HighlightsCard";
 
 type Filter = "alle" | "Spiel" | "Training" | "Treffen";
 
@@ -257,28 +258,31 @@ export default function Termine() {
           {feed.length === 0 ? (
             <EmptyState />
           ) : (
-            feed.map((it) =>
-              it.kind === "event" ? (
-                <EventCard
-                  key={it.event.id}
-                  event={it.event}
-                  status={att[it.event.id]}
-                  reason={reasons[it.event.id]}
-                  driving={!!driving[it.event.id]}
-                  beer={!!beer[it.event.id]}
-                  isAdmin={isAdmin}
-                  actorId={player?.id}
-                  onEdit={() => setEditEvent(it.event)}
-                  onOverview={() => router.push(`/event/${it.event.id}`)}
-                  onZusagen={() => rsvp(it.event.id, "zugesagt")}
-                  onAbsagen={() => rsvp(it.event.id, "abgesagt")}
-                  onToggleDrive={() => toggleDrive(it.event.id)}
-                  onToggleBeer={() => toggleBeer(it.event.id)}
-                />
-              ) : (
-                <HolidayInsert key={`h-${it.holiday.name}-${it.holiday.date}`} holiday={it.holiday} />
-              )
-            )
+            <>
+              <HighlightsCard />
+              {feed.map((it) =>
+                it.kind === "event" ? (
+                  <EventCard
+                    key={it.event.id}
+                    event={it.event}
+                    status={att[it.event.id]}
+                    reason={reasons[it.event.id]}
+                    driving={!!driving[it.event.id]}
+                    beer={!!beer[it.event.id]}
+                    isAdmin={isAdmin}
+                    actorId={player?.id}
+                    onEdit={() => setEditEvent(it.event)}
+                    onOverview={() => router.push(`/event/${it.event.id}`)}
+                    onZusagen={() => rsvp(it.event.id, "zugesagt")}
+                    onAbsagen={() => rsvp(it.event.id, "abgesagt")}
+                    onToggleDrive={() => toggleDrive(it.event.id)}
+                    onToggleBeer={() => toggleBeer(it.event.id)}
+                  />
+                ) : (
+                  <HolidayInsert key={`h-${it.holiday.name}-${it.holiday.date}`} holiday={it.holiday} />
+                )
+              )}
+            </>
           )}
         </ScrollView>
       )}

@@ -192,6 +192,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ player_id, conversation_id }),
     }),
+  voteSekt: (message_id: string) =>
+    req<{ ok: boolean; voters: string[]; count: number }>(
+      `/messages/${encodeURIComponent(message_id)}/vote-sekt`,
+      { method: "POST" }
+    ),
   conversations: () => req<Conversations>("/conversations"),
   unread: () => req<{ total: number }>("/unread"),
   eventsUnread: () => req<{ total: number }>("/events-unread"),
@@ -334,6 +339,13 @@ export type ChatMessage = {
   text: string;
   attachment?: Attachment | null;
   created_at: string;
+  poll?: {
+    kind: "sekt";
+    target_player_id: string;
+    target_name: string;
+    year: number;
+    voters: string[];
+  } | null;
 };
 
 export type ConversationSummary = {

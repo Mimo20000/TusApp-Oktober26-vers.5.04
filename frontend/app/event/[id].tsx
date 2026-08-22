@@ -70,6 +70,8 @@ export default function EventDetail() {
   const offen = data?.players.filter((p) => !p.rsvp) ?? [];
   const fahrer = data?.players.filter((p) => p.driving) ?? [];
   const bier = data?.players.filter((p) => p.beer) ?? [];
+  const isAwayGame = isGame && !!ev && ev.home !== CLUB && !ev.cancelled;
+  const needsRide = isAwayGame ? zusagen.filter((p) => !p.driving) : [];
 
   return (
     <View style={styles.container}>
@@ -152,6 +154,7 @@ export default function EventDetail() {
           {isGame ? (
             <Section title="Fahrgemeinschaft 🚗" players={fahrer} emptyText="Noch niemand fährt." highlight />
           ) : null}
+          {isAwayGame ? <RideShareSuggestion needsRide={needsRide} drivers={fahrer} /> : null}
           {isTraining ? (
             <Section title="Bringt Bier 🍺" players={bier} emptyText="Noch kein Bier zugesagt." highlight />
           ) : null}
@@ -160,6 +163,62 @@ export default function EventDetail() {
           <Section title="Absagen" players={absagen} emptyText="Keine Absagen." tint={colors.error} />
           <Section title="Offen" players={offen} emptyText="Alle haben geantwortet." tint={colors.muted} />
         </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function RideShareSuggestion({
+  needsRide,
+  drivers,
+}: {
+  needsRide: EventOverviewPlayer[];
+  drivers: EventOverviewPlayer[];
+}) {
+  const need = needsRide.length;
+  if (need === 0 && drivers.length === 0) return null;
+  // Suggest the driver with the smallest current "load" (round-robin feel).
+  // Since we have no seat-count data, we pick a random driver each render so
+  // over the season everyone gets asked equally.
+  const pick = drivers.length ? drivers[Math.floor(Math.random() * drivers.length)] : null;
+  return (
+    <View style={styles.rideCard} testID="rideshare-suggestion">
+      <View style={styles.rideHeader}>
+        <Ionicons name="car-sport" size={16} color={colors.brand} />
+        <Text style={styles.rideHeaderText}>Fahrgemeinschaft-Vorschlag</Text>
+      </View>
+      {need === 0 ? (
+        <Text style={styles.rideEmpty}>Alle Zugesagten fahren selbst — top organisiert! ✅</Text>
+      ) : drivers.length === 0 ? (
+        <Text style={styles.rideEmpty}>
+          {need === 1 ? "1 Spieler braucht" : `${need} Spieler brauchen`} eine Mitfahrgelegenheit — es hat sich aber noch kein Fahrer gemeldet. Bitte kurz koordinieren!
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.rideBody}>
+            {need === 1 ? "1 Spieler braucht" : `${need} Spieler brauchen`} eine Mitfahrgelegenheit:
+          </Text>
+          <View style={styles.rideChipRow}>
+            {needsRide.map((p) => (
+              <View key={p.id} style={styles.rideChip} testID={`needs-ride-${p.id}`}>
+                {p.jersey_number != null ? (
+                  <Text style={styles.rideChipNum}>{p.jersey_number}</Text>
+                ) : null}
+                <Text style={styles.rideChipName} numberOfLines={1}>
+                  {p.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {pick ? (
+            <View style={styles.rideHintRow}>
+              <Text style={styles.rideHintText}>
+                💡 Frag doch mal bei <Text style={styles.rideHintName}>{pick.name}</Text> nach –
+                {pick.email ? " Mail-Icon rechts nutzen." : " im Team-Chat pingen."}
+              </Text>
+            </View>
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -310,6 +369,47 @@ const styles = StyleSheet.create({
   },
   summaryValue: { fontFamily: font.extra, fontSize: 20, marginTop: 4 },
   summaryLabel: { fontFamily: font.medium, fontSize: 11, color: colors.muted, marginTop: 2 },
+  rideCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    gap: spacing.xs,
+  },
+  rideHeader: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  rideHeaderText: {
+    fontFamily: font.bold,
+    fontSize: 12,
+    color: colors.brand,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  rideEmpty: { fontFamily: font.regular, fontSize: 13, color: colors.onSurfaceSecondary },
+  rideBody: { fontFamily: font.medium, fontSize: 14, color: colors.onSurface },
+  rideChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
+  rideChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: radius.pill,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    maxWidth: 200,
+  },
+  rideChipNum: {
+    fontFamily: font.extra,
+    fontSize: 12,
+    color: colors.brand,
+    minWidth: 16,
+    textAlign: "center",
+  },
+  rideChipName: { fontFamily: font.medium, fontSize: 13, color: colors.onSurface, flexShrink: 1 },
+  rideHintRow: { marginTop: 6 },
+  rideHintText: { fontFamily: font.regular, fontSize: 13, color: colors.onSurfaceSecondary },
+  rideHintName: { fontFamily: font.bold, color: colors.brand },
   section: { marginTop: spacing.xl },
   sectionHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm },
   sectionTitle: { fontFamily: font.bold, fontSize: 16, color: colors.onSurface },

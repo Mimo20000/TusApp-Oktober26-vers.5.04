@@ -36,7 +36,8 @@ async def check_and_send_birthdays():
         first = name.split()[0] if name else "Sportsfreund"
         text = (
             f"Herzlichen Glückwunsch zum Geburtstag {first}! 🎉 "
-            f"Denk an die Kiste Bier im nächsten Training 🍺"
+            f"Denk an die Kiste Bier im nächsten Training 🍺 "
+            f"Stoßt gemeinsam an — tippt 🥂!"
         )
         msg = {
             "id": "MSG" + uuid.uuid4().hex[:10],
@@ -46,6 +47,13 @@ async def check_and_send_birthdays():
             "sender_name": "TuS Oberhausen 🎉",
             "text": text,
             "created_at": now_iso,
+            "poll": {
+                "kind": "sekt",
+                "target_player_id": p["id"],
+                "target_name": name or first,
+                "year": year,
+                "voters": [],
+            },
         }
         await db.messages.insert_one(dict(msg))
         await notify_new_message("team", "team", "system", "TuS Oberhausen 🎉", text)

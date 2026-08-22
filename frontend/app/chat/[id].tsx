@@ -135,8 +135,62 @@ export default function Conversation() {
     }
   }, [webKbInset]);
 
+  const toggleSekt = async (msgId: string) => {
+    if (!player) return;
+    try {
+      const res = await api.voteSekt(msgId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId && m.poll ? { ...m, poll: { ...m.poll, voters: res.voters } } : m
+        )
+      );
+    } catch {
+      // best-effort — swallow, next refresh will fix
+    }
+  };
+
   const renderItem = ({ item }: { item: ChatMessage }) => {
     const mine = item.sender_id === player?.id;
+
+    if (item.poll?.kind === "sekt") {
+      const voted = !!player && item.poll.voters.includes(player.id);
+      const count = item.poll.voters.length;
+      const isBirthdayPerson = player?.id === item.poll.target_player_id;
+      return (
+        <View style={[styles.bubbleRow, styles.rowOther]} testID={`sekt-poll-${item.id}`}>
+          <View style={[styles.bubble, styles.sektCard]}>
+            <Text style={styles.sektHeader}>🎂 Geburtstag</Text>
+            <Text style={styles.sektTitle}>{item.poll.target_name}</Text>
+            <Text style={styles.sektBody}>{item.text}</Text>
+            <Pressable
+              testID={`sekt-vote-${item.id}`}
+              disabled={isBirthdayPerson}
+              onPress={() => toggleSekt(item.id)}
+              style={({ pressed }) => [
+                styles.sektBtn,
+                voted && styles.sektBtnActive,
+                (pressed || isBirthdayPerson) && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.sektEmoji}>🥂</Text>
+              <Text style={[styles.sektBtnText, voted && { color: colors.onBrand }]}>
+                {isBirthdayPerson
+                  ? count === 0
+                    ? "Dein Team stößt gleich an"
+                    : `${count} stoßen mit dir an`
+                  : voted
+                    ? `Du stößt an (${count})`
+                    : count === 0
+                      ? "Anstoßen"
+                      : `Mitmachen (${count})`}
+              </Text>
+            </Pressable>
+            <Text style={[styles.time, styles.timeOther]}>{timeOf(item.created_at)}</Text>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowOther]}>
         <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleOther]}>
@@ -331,6 +385,41 @@ const styles = StyleSheet.create({
   time: { fontFamily: font.regular, fontSize: 10, marginTop: 3, alignSelf: "flex-end" },
   timeMine: { color: "rgba(255,255,255,0.8)" },
   timeOther: { color: colors.muted },
+  sektCard: {
+    maxWidth: "88%",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.brandTertiary,
+    borderColor: colors.brand,
+    borderWidth: 1,
+    borderBottomLeftRadius: 4,
+    gap: spacing.xs,
+  },
+  sektHeader: {
+    fontFamily: font.bold,
+    fontSize: 11,
+    color: colors.brand,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  sektTitle: { fontFamily: font.extra, fontSize: 20, color: colors.onSurface },
+  sektBody: { fontFamily: font.regular, fontSize: 14, color: colors.onSurface, marginTop: 2 },
+  sektBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  sektBtnActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  sektEmoji: { fontSize: 22 },
+  sektBtnText: { fontFamily: font.bold, fontSize: 14, color: colors.brand },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl },
   emptyText: { fontFamily: font.medium, fontSize: 14, color: colors.muted, textAlign: "center" },
   inputBar: {

@@ -125,3 +125,22 @@ async def push_register(body: PushRegisterBody, current_player_id: CurrentPlayer
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
     return {"ok": True}
+
+
+@router.post("/messages/{msg_id}/vote-sekt")
+async def toggle_sekt_vote(msg_id: str, current_player_id: CurrentPlayer):
+    """Toggle the current player's 🥂 vote on a birthday poll message.
+
+    Returns the updated poll (voters + count) so the client can render
+    the new state without refetching the whole conversation.
+    """
+    msg = await db.messages.find_one({"id": msg_id}, {"_id": 0})
+    if not msg or not msg.get("poll") or msg["poll"].get("kind") != "sekt":
+        raise HTTPException(status_code=404, detail="Keine Sekt-Abstimmung.")
+    voters: list[str] = list(msg["poll"].get("voters") or [])
+    if current_player_id in voters:
+        voters.remove(current_player_id)
+    else:
+        voters.append(current_player_id)
+    await db.messages.update_one({"id": msg_id}, {"$set": {"poll.voters": voters}})
+    return {"ok": True, "voters": voters, "count": len(voters)}
