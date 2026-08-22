@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from db import client
 from seed import seed_if_empty
 from birthday import check_and_send_birthdays
+from reminders import check_and_send_rsvp_reminders
 from routers import attendance, chat, events, files, misc, players, stats
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +38,7 @@ app.add_middleware(
 async def startup():
     await seed_if_empty()
     await check_and_send_birthdays()
+    await check_and_send_rsvp_reminders()
 
 
 @app.on_event("shutdown")

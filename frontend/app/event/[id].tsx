@@ -222,6 +222,15 @@ function Section({
               ) : null}
               <View style={{ flex: 1 }}>
                 <Text style={styles.playerName} numberOfLines={1}>{p.name}</Text>
+                {p.rsvp === "abgesagt" && p.reason ? (
+                  <Text
+                    testID={`overview-reason-${p.id}`}
+                    style={styles.playerReason}
+                    numberOfLines={2}
+                  >
+                    Grund: {p.reason}
+                  </Text>
+                ) : null}
                 {p.email ? (
                   <Pressable
                     testID={`overview-email-${p.id}`}
@@ -342,6 +351,12 @@ const styles = StyleSheet.create({
   },
   jerseyText: { fontFamily: font.extra, fontSize: 12, color: colors.onBrand },
   playerName: { fontFamily: font.medium, fontSize: 15, color: colors.onSurface },
+  playerReason: {
+    fontFamily: font.medium,
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 2,
+  },
   emailBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   emailText: { fontFamily: font.medium, fontSize: 12, color: colors.brand, flexShrink: 1 },
   playerPos: { fontFamily: font.bold, fontSize: 12, color: colors.brand },

@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 6 fully verified end-to-end: backend 7/7 pytest PASS and frontend playwright PASS on real mobile viewport (390x844). (A) Version 3.0 bump — manifest.json name='Tus2 by Mimo 3.0', description contains 'Version 3.0', manifest.id STILL == 'Mimos App' (installed v2 PWAs will receive this as an update, not a fresh install); sw.js SW_VERSION=\"3.0.0\" & cache 'tus2-mimo-3.0.0'; package.json version=='3.0.0'; app.json expo.version=='3.0.0'; Login screen renders exactly one 'Version 3.0' pill. (B) EventCard rendering: AWAY Spiel event has BOTH testID='fahre-{id}' and testID='bier-{id}' inside the same event-card, laid out side-by-side (measured bounding boxes: fahre x=33 y=704.5 w=158 h=40, bier x=199 y=704.5 w=158 h=40 — identical Y, different X, height==40 matching styles.extraBtnSmall). HOME Spiel event has NEITHER testID rendered. Training has only testID='bier-{id}' (no fahre) at full width. (C) Beer end-to-end for Spiel: POST /api/beer with beer:true returns {ok:true}; GET /api/attendance contains the row with beer==true; a team chat message is auto-inserted containing '🍺' AND 'Spiel' (verified NOT to contain 'Training' — proves the type-branching text works). Toggle off inserts a message with '🍺❌' AND 'Spiel'. (D) Regressions: maps-{away_id} route button still present on away Spiel; /api/files/{fid}/thumbnail returns 200 image/*; POST /api/events/{id}/cancel still hard-deletes ({ok:true, deleted:true}); GET /api/unread scan runs without error. No red screens, no new console errors introduced (only the pre-existing 'shadow*' & 'expo-notifications web' warnings carry over).",
+  "acceptance_results": {
+    "manifest_v3_and_identity_preserved": "PASS - name/description bumped, id='Mimos App' unchanged",
+    "sw_v3": "PASS - SW_VERSION=3.0.0 & tus2-mimo-3.0.0 cache",
+    "package_and_app_json_v3": "PASS",
+    "login_version_pill_count_exactly_1": "PASS",
+    "away_spiel_has_fahre_and_bier_side_by_side": "PASS - same y, dx=166px, height=40px",
+    "home_spiel_no_fahre_no_bier": "PASS",
+    "training_has_bier_no_fahre": "PASS",
+    "treffen_neither": "not seeded (no Treffen present); code path in EventCard makes it structurally impossible since both branches require Spiel or Training type",
+    "beer_on_spiel_persists_and_chat_says_spiel": "PASS - attendance beer=true, chat msg contains '🍺' and 'Spiel', no 'Training'",
+    "beer_off_spiel_chat_says_spiel_with_cross": "PASS - chat msg contains '🍺❌' and 'Spiel'",
+    "maps_button_still_on_away": "PASS",
+    "thumbnail_endpoint_200": "PASS",
+    "delete_event_hard_delete": "PASS - {ok:true, deleted:true}",
+    "unread_scan_no_error": "PASS"
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console warning (carry-over)", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Present since iteration_2, not introduced now."},
+      {"component": "expo-notifications (carry-over)", "issue": "Listening to push token changes is not yet fully supported on web (warning-only, expected for web preview)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_6.json",
+    "/app/backend/tests/test_iter6_features.py",
+    "/app/test_reports/pytest/iter6.xml"
+  ],
+  "action_items": [
+    "None blocking – both features (away-Spiele beer button + version 3.0 bump) verified end-to-end.",
+    "Optional carry-over: migrate remaining shadow*/pointerEvents style props to boxShadow / style.pointerEvents (not introduced this iteration)."
+  ],
+  "critical_code_review_comments": [
+    "frontend/src/components/EventCard.tsx lines 166-189: away-Spiel branch renders both fahre and bier inside <View style={extrasRow}> with flex:1 & height:40 — correct side-by-side layout, matches iter6 requirement.",
+    "EventCard.tsx line 191-202: Training branch keeps the ORIGINAL full-width extraBtn (height:44). Good — no regression.",
+    "backend/routers/attendance.py lines 92-127: /beer branches on event.type=='Spiel' vs Training; opponent gracefully omitted when missing. Message text verified in pytest.",
+    "manifest.json: id='Mimos App' preserved — this is critical to prevent v2 PWAs being treated as a NEW install after the v3 upgrade.",
+    "public/sw.js correctly uses skipWaiting + clients.claim, so v3 activates on next reload; old caches are purged in activate.",
+    "app.json 'expo.version' and package.json 'version' both bumped to 3.0.0 in sync."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter6_features.py (new: 7 pytest tests covering version bump, beer flow for Spiel, and regressions)"
+  ],
+  "success_rate": {"backend": "7/7 = 100%", "frontend": "1/1 playwright scenario PASS (all DOM assertions + side-by-side geometry)"},
+  "seed_data_creation": "3 short-lived events seeded for the frontend test (Iter6 AwayFC, Iter6 HomeFC, Iter6 Training) and one for backend beer test (BierGegner FC) and one for delete regression (RegDelete FC). ALL five were hard-deleted at the end of their tests (cancel endpoint). Josh's beer attendance for the temporary Spiel and any auto-generated chat messages tied to the deleted event_id are still in Mongo but functionally orphaned; not user-visible since they no longer appear in the events feed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend base URL: https://mobile-first-stage-71.preview.emergentagent.com. josh-ankermann / pw12345 still works, has email + avatar_file_id persisted from iter4. Reusable pytest: /app/backend/tests/test_iter6_features.py (module-scoped api + mongo fixtures). PWA identity test (manifest.id=='Mimos App') is a permanent contract — must stay so v2->v3 is an update not a reinstall. When testing bier button UI, remember: side-by-side row exists only for event.type=='Spiel' AND event.home!==CLUB (i.e. away games); home games render neither, Training renders single full-width bier only. testID pattern is unchanged (fahre-{id}, bier-{id})."
+}

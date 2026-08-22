@@ -39,3 +39,63 @@ def send_reset_code(email: str, code: str, name: str):
         logger.info("Reset code email sent to %s", email)
     except Exception as e:
         logger.warning("Failed to send reset email to %s: %s", email, e)
+
+
+def send_rsvp_reminder(email: str, name: str, event: dict, hours_left: int) -> None:
+    """Reminder for a player who hasn't answered zusagen/absagen yet.
+
+    Called synchronously from ``reminders.check_and_send_rsvp_reminders`` after
+    the atomic upsert marker was inserted, so we're guaranteed to fire at most
+    once per (event, player, 3h-slot).
+    """
+    first = (name or "").split()[0] if name else "Sportsfreund"
+    kind = event.get("type") or "Termin"
+    opponent = (event.get("opponent") or "").strip()
+    title = f"Spiel vs. {opponent}" if kind == "Spiel" and opponent else kind
+    date = event.get("date") or ""
+    try:
+        y, m, d = date.split("-")
+        date_de = f"{d}.{m}.{y}"
+    except ValueError:
+        date_de = date
+    time_s = event.get("time") or ""
+    location = (event.get("location") or "").strip()
+    when = f"{date_de} um {time_s} Uhr" if time_s else date_de
+    where_line = f"<p><strong>Ort:</strong> {location}</p>" if location else ""
+
+    if hours_left <= 6:
+        urgency = "🚨 Nur noch wenige Stunden – bitte JETZT abstimmen"
+    elif hours_left <= 24:
+        urgency = f"⏰ In {hours_left} Stunden geht's los"
+    else:
+        urgency = f"📅 In {hours_left} Stunden ist der nächste Termin"
+
+    html = f"""
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto">
+      <h2 style="color:#DA291C;margin-bottom:4px">TuS Oberhausen II</h2>
+      <p style="color:#8A8A8E;margin-top:0">{urgency}</p>
+      <p>Hallo {first},</p>
+      <p>du hast beim folgenden Termin noch <strong>nicht abgestimmt</strong>:</p>
+      <div style="background:#FEECEB;border-left:4px solid #DA291C;padding:14px 18px;border-radius:8px;margin:14px 0">
+        <p style="margin:0;font-size:16px;font-weight:bold;color:#1A1A1A">{title}</p>
+        <p style="margin:6px 0 0 0;color:#4A4A4A"><strong>Wann:</strong> {when}</p>
+        {where_line}
+      </div>
+      <p>Bitte öffne die App und tippe auf <strong>Zusagen</strong> oder <strong>Absagen</strong>,
+         damit dein Team planen kann.</p>
+      <p style="color:#8A8A8E;font-size:12px;margin-top:24px">
+         Diese Erinnerung wird alle drei Stunden versendet, bis du abgestimmt hast oder der Termin beginnt.
+         Sobald du geantwortet hast, hört sie automatisch auf.
+      </p>
+    </div>
+    """
+    try:
+        resend.Emails.send({
+            "from": f"TuS Oberhausen II <{SENDER_EMAIL}>",
+            "to": [email],
+            "subject": f"⏰ Bitte abstimmen: {title} – {when}",
+            "html": html,
+        })
+        logger.info("RSVP reminder email sent to %s for event %s", email, event.get("id"))
+    except Exception as e:
+        logger.warning("Failed to send RSVP reminder email to %s: %s", email, e)

@@ -49,12 +49,27 @@ async def get_attendance():
 async def set_rsvp(rsvp: RSVP):
     if rsvp.status not in ("zugesagt", "abgesagt"):
         raise HTTPException(status_code=400, detail="Ungültiger Status")
+    reason = (rsvp.reason or "").strip()
+    if rsvp.status == "abgesagt" and not reason:
+        raise HTTPException(status_code=400, detail="Bitte gib einen Grund für die Absage an.")
+    upd = {"status": rsvp.status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    # Only persist the reason for absagen; clear it when the player later switches to zugesagt.
+    if rsvp.status == "abgesagt":
+        upd["reason"] = reason
+    else:
+        upd["reason"] = None
     await db.attendance.update_one(
         {"event_id": rsvp.event_id, "player_id": rsvp.player_id},
-        {"$set": {"status": rsvp.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": upd},
         upsert=True,
     )
-    return {"ok": True, "event_id": rsvp.event_id, "player_id": rsvp.player_id, "status": rsvp.status}
+    return {
+        "ok": True,
+        "event_id": rsvp.event_id,
+        "player_id": rsvp.player_id,
+        "status": rsvp.status,
+        "reason": upd.get("reason"),
+    }
 
 
 @router.post("/driving")
@@ -104,7 +119,12 @@ async def set_beer(body: BeerBody):
         event = await db.events.find_one({"id": body.event_id})
         if player and event:
             first = (player.get("name") or "").split()[0] or player.get("name")
-            text = f"🍺 {first} bringt Bier zum Training am {_fmt_date(event.get('date'))}."
+            if event.get("type") == "Spiel":
+                opp = event.get("opponent")
+                gegner = f" gegen {opp}" if opp else ""
+                text = f"🍺 {first} bringt Bier zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            else:
+                text = f"🍺 {first} bringt Bier zum Training am {_fmt_date(event.get('date'))}."
             await _announce_team(player, text)
     # Announce when turning OFF (was bringing beer, now not).
     elif was and not body.beer:
@@ -112,6 +132,11 @@ async def set_beer(body: BeerBody):
         event = await db.events.find_one({"id": body.event_id})
         if player and event:
             first = (player.get("name") or "").split()[0] or player.get("name")
-            text = f"🍺❌ {first} bringt doch kein Bier zum Training am {_fmt_date(event.get('date'))}."
+            if event.get("type") == "Spiel":
+                opp = event.get("opponent")
+                gegner = f" gegen {opp}" if opp else ""
+                text = f"🍺❌ {first} bringt doch kein Bier zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            else:
+                text = f"🍺❌ {first} bringt doch kein Bier zum Training am {_fmt_date(event.get('date'))}."
             await _announce_team(player, text)
     return {"ok": True}

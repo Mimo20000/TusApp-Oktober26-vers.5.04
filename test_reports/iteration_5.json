@@ -1,0 +1,52 @@
+{
+  "summary": "All 3 new features + regression verified end-to-end (backend 6/6 pytest PASS + frontend playwright PASS). (1) HARD-DELETE CANCEL: POST /api/events/{id}/cancel returns {ok:true, deleted:true}; the event vanishes from GET /api/events and all matching attendance rows are cascade-deleted (verified via direct Mongo count). Legacy soft-cancelled docs (cancelled:true injected directly into Mongo) are correctly filtered out by the $or query in get_events. (2) RSVP REMINDERS: creating an event ~25h in the future, ensuring josh has email+Aktiv and no attendance row, then GET /api/unread?player_id=josh-ankermann atomically upserts one rsvp_reminder:{eid}:{josh}:slotN marker in db.system_events (proving the atomic marker is inserted BEFORE the Resend send call — even with placeholder RESEND_API_KEY the exception is caught after the marker exists). A second /api/unread within the same 5-min window does not add a new reminder_scan or rsvp_reminder marker (5-min debounce lock works). After inserting attendance status=zugesagt and clearing debounce, a fresh scan inserts ZERO new rsvp_reminder markers for that pair (answered players skip). Scope test: an event 5 days out (>48h) produces 0 markers. (3) FRONTEND fahre button hidden on home games: seeded 1 home (opponent 'TestHome FC', home_game=true → home === 'TuS Oberhausen II') and 1 away (home_game=false → home === 'TestAway FC') game via /api/events, logged in as josh-ankermann / pw12345 on mobile viewport (390x844), navigated to Termine tab and scrolled — [data-testid=\"fahre-{home_id}\"] is ABSENT while [data-testid=\"fahre-{away_id}\"] is PRESENT. Zusagen/Absagen still render on both. (4) THUMBNAIL REGRESSION: GET /api/players returns josh-ankermann with avatar_file_id set (persisted from iteration_4). GET /api/files/{fid}/thumbnail returns 200 with content-type image/* and payload size ≤ raw size. Pre-existing console warnings (shadow*, props.pointerEvents) carry over from earlier iterations, not introduced now.",
+  "acceptance_results": {
+    "cancel_hard_deletes_event_and_attendance": "PASS - GET /api/events no longer returns the id; attendance count == 0",
+    "get_events_filters_legacy_soft_cancelled": "PASS - direct-mongo-inserted {cancelled:true} doc is not returned",
+    "rsvp_reminder_marker_inserted_atomically": "PASS - rsvp_reminder:{ev}:{josh}:slotN present after /api/unread",
+    "debounce_prevents_second_scan_within_5min": "PASS - reminder_scan:* stable, no new rsvp_reminder marker on 2nd call",
+    "answered_player_gets_no_new_marker": "PASS - after inserting attendance zugesagt + clearing markers, fresh scan yields 0 markers",
+    "out_of_bounds_event_no_marker": "PASS - event 5 days in future produces 0 rsvp_reminder markers",
+    "frontend_hides_fahre_on_home_game": "PASS - [data-testid=fahre-{homeId}] not rendered",
+    "frontend_shows_fahre_on_away_game": "PASS - [data-testid=fahre-{awayId}] rendered",
+    "thumbnail_endpoint_regression": "PASS - GET /api/files/{fid}/thumbnail 200 image/* size <= raw",
+    "avatar_file_id_still_persisted": "PASS - GET /api/players returns josh with non-empty avatar_file_id"
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console warning (carry-over)", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Present since iteration_2, not introduced by this iteration."},
+      {"component": "console warning (carry-over)", "issue": "props.pointerEvents is deprecated. Use style.pointerEvents. Not introduced by this iteration."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_5.json",
+    "/app/backend/tests/test_iter5_features.py",
+    "/app/test_reports/pytest/iter5.xml"
+  ],
+  "action_items": [
+    "None blocking – all requested features (hard-delete cancel, 3h RSVP reminder cadence, hide Ich fahre on Heimspiele) verified.",
+    "Optional carry-over: migrate remaining shadow* / props.pointerEvents to boxShadow / style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/events.py cancel_event: sends push BEFORE the hard delete + cascade-deletes attendance in a separate call. Not transactional but acceptable for the current app size; a Mongo transaction would guard against a mid-request crash leaving orphan attendance, worth noting for the future.",
+    "backend/reminders.py check_and_send_rsvp_reminders: correct ordering — the atomic system_events upsert happens BEFORE send_rsvp_reminder, and the send call is wrapped in try/except. That means the debounce/idempotency guarantee holds even if Resend is misconfigured. Good.",
+    "reminders.py uses datetime.strftime('%Y-%m-%dT%H:%M')[:15] + '0' to build the 5-min slot key; correct rounding but subtle — a comment or helper would improve readability.",
+    "reminders.py _to_dt treats the event's local wall-clock time as UTC. That's fine for the current single-timezone team but will drift once DST changes between now and the event. Not urgent; document assumption.",
+    "frontend/components/EventCard.tsx line 166: hides fahre button when event.home === CLUB. Handles Trainings/Treffen implicitly (event.type check first). Verified with real seeded events."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter5_features.py (new: 6 pytest tests covering all iteration-5 scenarios)"
+  ],
+  "success_rate": {
+    "backend": "6/6 = 100% (test_iter5_features.py) + carry-over test_avatar_flow.py still green",
+    "frontend": "2/2 fahre visibility assertions PASS on real Termine tab (home hidden, away shown)"
+  },
+  "seed_data_creation": "During tests: 3 short-lived events (DeleteMe SV / ReminderOpp / FarFuture) and 1 legacy-cancelled doc were created + cleaned up (hard-delete or delete_one). At the end of the frontend test both seeded 2026-12-20 / 2026-12-21 events were also cancelled. No stray data remains besides josh's persistent avatar_file_id from iteration_4. reminder_scan:* / rsvp_reminder:* markers were cleared between test cases; a few current-window markers may still exist in db.system_events but they naturally roll off.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend base URL: https://mobile-first-stage-71.preview.emergentagent.com. josh-ankermann password remains pw12345 with email set and avatar_file_id persisted from iteration_4. Reusable pytest: /app/backend/tests/test_iter5_features.py (module-scoped api + mongo fixtures). If you re-run RSVP tests, either wait 5 minutes or delete db.system_events docs matching key ^reminder_scan: before asserting a fresh scan will actually execute."
+}

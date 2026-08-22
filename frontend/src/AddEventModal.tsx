@@ -107,20 +107,23 @@ export default function AddEventModal({ visible, onClose, onCreated, event }: Pr
         onCreated();
         close();
       } catch {
-        setError("Absagen fehlgeschlagen. Bitte erneut versuchen.");
+        setError("Löschen fehlgeschlagen. Bitte erneut versuchen.");
       } finally {
         setCancelling(false);
       }
     };
     if (Platform.OS === "web") {
+      // Web: use the browser confirm since Alert is a no-op on RNWeb
+      // eslint-disable-next-line no-alert
+      if (typeof window !== "undefined" && !window.confirm("Termin wirklich löschen? Er wird bei allen aus der Liste entfernt.")) return;
       run();
     } else {
       Alert.alert(
-        "Termin absagen?",
-        "Alle Mitglieder werden über die Absage benachrichtigt.",
+        "Termin löschen?",
+        "Der Termin verschwindet dauerhaft aus der Liste für alle Mitglieder.",
         [
           { text: "Abbrechen", style: "cancel" },
-          { text: "Absagen", style: "destructive", onPress: run },
+          { text: "Löschen", style: "destructive", onPress: run },
         ]
       );
     }
@@ -141,6 +144,7 @@ export default function AddEventModal({ visible, onClose, onCreated, event }: Pr
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (isEdit && event) {
         await api.updateEvent(event.id, {
+          type,
           date: dateStr,
           time: timeStr,
           location: location.trim() || null,
@@ -188,18 +192,16 @@ export default function AddEventModal({ visible, onClose, onCreated, event }: Pr
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {/* Type toggle */}
+              {/* Type toggle — bei Edit erlauben Coaches jetzt die Umkategorisierung */}
               <View style={styles.segment}>
                 {(["Spiel", "Training", "Treffen"] as const).map((t) => (
                   <Pressable
                     key={t}
                     testID={`type-${t}`}
-                    onPress={() => !isEdit && setType(t)}
-                    disabled={isEdit}
+                    onPress={() => setType(t)}
                     style={[
                       styles.segBtn,
                       type === t && styles.segBtnActive,
-                      isEdit && type !== t && { opacity: 0.35 },
                     ]}
                   >
                     <Ionicons

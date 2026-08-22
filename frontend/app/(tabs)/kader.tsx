@@ -95,8 +95,8 @@ export default function Kader() {
         title="Kader"
         subtitle={
           isAdmin
-            ? `Trainer-Modus · Tippe zum Bearbeiten`
-            : `Tippe deinen Namen für E-Mail, Geburtsdatum & Trikotnummer`
+            ? `Trainer-Modus · Tippe eine Zeile zum Bearbeiten (Foto, E-Mail, Nummer, Status)`
+            : `Tippe deinen Namen für Foto, E-Mail, Geburtsdatum & Trikotnummer`
         }
       />
       <Chips
@@ -130,7 +130,7 @@ export default function Kader() {
                 <View style={styles.avatar}>
                   {p.avatar_file_id ? (
                     <Image
-                      source={{ uri: api.fileRawUrl(p.avatar_file_id) }}
+                      source={{ uri: api.fileThumbUrl(p.avatar_file_id) }}
                       style={styles.avatarImg}
                       contentFit="cover"
                       transition={150}

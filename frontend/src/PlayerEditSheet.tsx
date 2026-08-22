@@ -185,7 +185,7 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
                 <View style={styles.photoWrap}>
                   {avatarFileId ? (
                     <Image
-                      source={{ uri: api.fileRawUrl(avatarFileId) }}
+                      source={{ uri: api.fileThumbUrl(avatarFileId) }}
                       style={styles.photo}
                       contentFit="cover"
                       transition={150}

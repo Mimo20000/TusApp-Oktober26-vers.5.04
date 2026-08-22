@@ -14,7 +14,11 @@ router = APIRouter()
 
 @router.get("/events", response_model=List[Event])
 async def get_events():
-    docs = await db.events.find({}, {"_id": 0}).to_list(500)
+    # Never return soft-cancelled events (legacy data) — cancel now hard-deletes.
+    docs = await db.events.find(
+        {"$or": [{"cancelled": {"$exists": False}}, {"cancelled": False}]},
+        {"_id": 0},
+    ).to_list(500)
     docs.sort(key=lambda e: (e["date"], e["time"]))
     return docs
 
@@ -54,32 +58,59 @@ async def update_event(event_id: str, body: EventPatch):
         raise HTTPException(status_code=404, detail="Termin nicht gefunden")
     now = datetime.now(timezone.utc).isoformat()
     upd = {"notify_at": now}
+
+    # Optional reclassification (Spiel <-> Training <-> Treffen) — the coach can
+    # change the type on an already-published event.
+    unset: dict = {}
+    new_type = ev.get("type")
+    if body.type is not None:
+        if body.type not in ("Spiel", "Training", "Treffen"):
+            raise HTTPException(status_code=400, detail="Ungültiger Typ")
+        new_type = body.type
+        upd["type"] = new_type
+
     if body.date:
         upd["date"] = body.date
     if body.time:
         upd["time"] = body.time
     if body.location is not None:
         upd["location"] = body.location.strip() or None
-    if ev.get("type") == "Spiel" and (body.opponent is not None or body.home_game is not None):
-        opp = (body.opponent.strip() if body.opponent else ev.get("opponent")) or "Gegner"
+
+    if new_type == "Spiel":
+        # Recompute Spiel-only fields if we're now (or still) a Spiel.
+        opp_raw = body.opponent.strip() if body.opponent else ev.get("opponent")
+        opp = opp_raw or "Gegner"
         home_game = body.home_game if body.home_game is not None else (ev.get("home") == CLUB)
         home = CLUB if home_game else opp
         away = opp if home_game else CLUB
         upd.update({"home": home, "away": away, "opponent": opp, "title": f"{home} vs. {away}"})
-    await db.events.update_one({"id": event_id}, {"$set": upd})
-    await notify_event({**ev, **upd}, "Termin geändert")
+    else:
+        # Moving out of Spiel — strip Spiel-only fields so the frontend doesn't
+        # misrender an obsolete opponent / home / away.
+        upd["title"] = new_type
+        unset.update({"home": "", "away": "", "opponent": ""})
+
+    ops: dict = {"$set": upd}
+    if unset:
+        ops["$unset"] = unset
+    await db.events.update_one({"id": event_id}, ops)
+    await notify_event({**ev, **upd, **{k: None for k in unset}}, "Termin geändert")
     return {"ok": True, **upd}
 
 
 @router.post("/events/{event_id}/cancel")
 async def cancel_event(event_id: str):
+    """Hard-delete an event. Sends a push first so players are still notified,
+    then removes the event and all its attendance rows so the entry disappears
+    from every client on the next fetch. Kept under /cancel to preserve the
+    existing frontend API surface."""
     ev = await db.events.find_one({"id": event_id})
     if not ev:
         raise HTTPException(status_code=404, detail="Termin nicht gefunden")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.events.update_one({"id": event_id}, {"$set": {"cancelled": True, "notify_at": now}})
     await notify_event({**ev, "cancelled": True}, "Termin abgesagt")
-    return {"ok": True}
+    await db.events.delete_one({"id": event_id})
+    await db.attendance.delete_many({"event_id": event_id})
+    return {"ok": True, "deleted": True}
 
 
 @router.get("/events/{event_id}/overview")
@@ -101,6 +132,7 @@ async def event_overview(event_id: str):
             "jersey_number": p.get("jersey_number"),
             "email": p.get("email"),
             "rsvp": a.get("status"),
+            "reason": a.get("reason"),
             "driving": bool(a.get("driving")),
             "beer": bool(a.get("beer")),
         })

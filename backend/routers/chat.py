@@ -7,6 +7,7 @@ from db import db
 from models import MessageBody, PushRegisterBody, ReadBody
 from push import direct_conv_id, notify_new_message
 from birthday import check_and_send_birthdays
+from reminders import check_and_send_rsvp_reminders
 
 router = APIRouter()
 
@@ -106,6 +107,7 @@ async def conversations(player_id: str):
 @router.get("/unread")
 async def unread_total(player_id: str):
     await check_and_send_birthdays()
+    await check_and_send_rsvp_reminders()
     total = await _unread_for(player_id, "team")
     players = await db.players.find({"id": {"$ne": player_id}}, {"_id": 0, "id": 1}).to_list(500)
     for p in players:

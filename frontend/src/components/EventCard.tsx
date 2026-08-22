@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 import { colors, spacing, radius, font } from "@/src/theme";
 import { TeamEvent } from "@/src/api";
 import { formatDate } from "@/src/ui";
+import PaypalBierkasseButton from "@/src/PaypalBierkasseButton";
 
 const CLUB = "TuS Oberhausen II";
 
@@ -21,9 +22,13 @@ function openInMaps(query: string) {
 type Props = {
   event: TeamEvent;
   status?: string;
+  reason?: string;
   driving: boolean;
   beer: boolean;
   isAdmin: boolean;
+  bierwartEmail: string;
+  actorId?: string;
+  onBierwartChanged?: (email: string) => void;
   onEdit: () => void;
   onOverview: () => void;
   onZusagen: () => void;
@@ -35,9 +40,13 @@ type Props = {
 export default function EventCard({
   event,
   status,
+  reason,
   driving,
   beer,
   isAdmin,
+  bierwartEmail,
+  actorId,
+  onBierwartChanged,
   onEdit,
   onOverview,
   onZusagen,
@@ -163,30 +172,83 @@ export default function EventCard({
             </Pressable>
           </View>
 
-          {event.type === "Spiel" ? (
+          {status === "abgesagt" && reason ? (
             <Pressable
-              testID={`fahre-${event.id}`}
-              onPress={onToggleDrive}
-              style={[styles.extraBtn, driving ? styles.extraActive : styles.extraIdle]}
+              testID={`absage-reason-${event.id}`}
+              onPress={onAbsagen}
+              style={styles.reasonRow}
+              accessibilityLabel="Absage-Grund bearbeiten"
             >
-              <Ionicons name="car-sport" size={18} color={driving ? colors.onBrand : colors.brand} />
-              <Text style={[styles.extraText, { color: driving ? colors.onBrand : colors.brand }]}>
-                {driving ? "Ich fahre ✓" : "Ich fahre"}
+              <Ionicons name="chatbox-ellipses-outline" size={13} color={colors.error} />
+              <Text style={styles.reasonText} numberOfLines={2}>
+                Grund: {reason}
               </Text>
+              <Ionicons name="pencil" size={12} color={colors.error} />
             </Pressable>
           ) : null}
 
+          {event.type === "Spiel" && event.home && event.home !== CLUB ? (
+            <>
+              <View style={styles.extrasRow}>
+                <Pressable
+                  testID={`fahre-${event.id}`}
+                  onPress={onToggleDrive}
+                  style={[styles.extraBtnSmall, driving ? styles.extraActive : styles.extraIdle]}
+                >
+                  <Ionicons name="car-sport" size={16} color={driving ? colors.onBrand : colors.brand} />
+                  <Text style={[styles.extraTextSmall, { color: driving ? colors.onBrand : colors.brand }]}>
+                    {driving ? "Ich fahre ✓" : "Ich fahre"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  testID={`bier-${event.id}`}
+                  onPress={onToggleBeer}
+                  style={[styles.extraBtnSmall, beer ? styles.extraActive : styles.extraIdle]}
+                >
+                  <Ionicons name="beer" size={16} color={beer ? colors.onBrand : colors.brand} />
+                  <Text style={[styles.extraTextSmall, { color: beer ? colors.onBrand : colors.brand }]}>
+                    {beer ? "Bringe Bier ✓" : "Bringe Bier"}
+                  </Text>
+                </Pressable>
+              </View>
+              <View style={styles.paypalRow}>
+                <PaypalBierkasseButton
+                  testID={`paypal-${event.id}`}
+                  email={bierwartEmail}
+                  actorId={actorId}
+                  isAdmin={isAdmin}
+                  onEmailChanged={onBierwartChanged}
+                  contextNote={`${d.day}.${d.month}`}
+                  compact
+                />
+              </View>
+            </>
+          ) : null}
+
           {event.type === "Training" ? (
-            <Pressable
-              testID={`bier-${event.id}`}
-              onPress={onToggleBeer}
-              style={[styles.extraBtn, beer ? styles.extraActive : styles.extraIdle]}
-            >
-              <Ionicons name="beer" size={18} color={beer ? colors.onBrand : colors.brand} />
-              <Text style={[styles.extraText, { color: beer ? colors.onBrand : colors.brand }]}>
-                {beer ? "Bringe Bier ✓" : "Bringe Bier"}
-              </Text>
-            </Pressable>
+            <>
+              <Pressable
+                testID={`bier-${event.id}`}
+                onPress={onToggleBeer}
+                style={[styles.extraBtn, beer ? styles.extraActive : styles.extraIdle]}
+              >
+                <Ionicons name="beer" size={18} color={beer ? colors.onBrand : colors.brand} />
+                <Text style={[styles.extraText, { color: beer ? colors.onBrand : colors.brand }]}>
+                  {beer ? "Bringe Bier ✓" : "Bringe Bier"}
+                </Text>
+              </Pressable>
+              <View style={styles.paypalRow}>
+                <PaypalBierkasseButton
+                  testID={`paypal-${event.id}`}
+                  email={bierwartEmail}
+                  actorId={actorId}
+                  isAdmin={isAdmin}
+                  onEmailChanged={onBierwartChanged}
+                  contextNote={`${d.day}.${d.month}`}
+                  compact
+                />
+              </View>
+            </>
           ) : null}
         </>
       )}
@@ -281,6 +343,19 @@ const styles = StyleSheet.create({
   abIdle: { backgroundColor: colors.errorSoft, borderColor: colors.errorSoft },
   abActive: { backgroundColor: colors.error, borderColor: colors.error },
   actionText: { fontFamily: font.bold, fontSize: 14 },
+  reasonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.errorSoft,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.error,
+  },
+  reasonText: { flex: 1, fontFamily: font.medium, fontSize: 12, color: colors.error },
   extraBtn: {
     height: 44,
     borderRadius: radius.md,
@@ -294,4 +369,17 @@ const styles = StyleSheet.create({
   extraIdle: { backgroundColor: colors.brandSecondary, borderColor: colors.brandSecondary },
   extraActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   extraText: { fontFamily: font.bold, fontSize: 14 },
+  extrasRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  paypalRow: { marginTop: spacing.sm, alignItems: "flex-start" },
+  extraBtnSmall: {
+    flex: 1,
+    height: 40,
+    borderRadius: radius.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1.5,
+  },
+  extraTextSmall: { fontFamily: font.bold, fontSize: 13 },
 });

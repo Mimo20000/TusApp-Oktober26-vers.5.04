@@ -21,6 +21,7 @@ import { api, TeamEvent, Attendance, Holiday } from "@/src/api";
 import { useSession } from "@/src/session";
 import { Header, Chips } from "@/src/ui";
 import AddEventModal from "@/src/AddEventModal";
+import AbsageReasonModal from "@/src/AbsageReasonModal";
 import { buildIcs } from "@/src/ics";
 import EventCard from "@/src/components/EventCard";
 import HolidayInsert from "@/src/components/HolidayInsert";
@@ -44,6 +45,9 @@ export default function Termine() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [driving, setDriving] = useState<Record<string, boolean>>({});
   const [beer, setBeer] = useState<Record<string, boolean>>({});
+  const [bierwartEmail, setBierwartEmail] = useState<string>("lj-sascha@web.de");
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [pendingAbsage, setPendingAbsage] = useState<TeamEvent | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -74,26 +78,31 @@ export default function Termine() {
 
   const load = useCallback(async () => {
     try {
-      const [ev, attList, hol] = await Promise.all([
+      const [ev, attList, hol, bw] = await Promise.all([
         api.events(),
         api.attendance(),
         api.holidays().catch(() => [] as Holiday[]),
+        api.getBierwart().catch(() => ({ email: "lj-sascha@web.de" })),
       ]);
       setEvents(ev);
       setHolidays(hol);
+      setBierwartEmail(bw.email || "lj-sascha@web.de");
       const mine: Record<string, string> = {};
       const mineDrive: Record<string, boolean> = {};
       const mineBeer: Record<string, boolean> = {};
+      const mineReason: Record<string, string> = {};
       attList.forEach((a: Attendance) => {
         if (a.player_id === player?.id) {
           mine[a.event_id] = a.status;
           if (a.driving) mineDrive[a.event_id] = true;
           if (a.beer) mineBeer[a.event_id] = true;
+          if (a.reason) mineReason[a.event_id] = a.reason;
         }
       });
       setAtt(mine);
       setDriving(mineDrive);
       setBeer(mineBeer);
+      setReasons(mineReason);
     } finally {
       setLoading(false);
     }
@@ -118,12 +127,38 @@ export default function Termine() {
 
   const rsvp = async (eventId: string, status: "zugesagt" | "abgesagt") => {
     if (!player) return;
+    // Für "Absagen" verlangen wir einen Grund — Modal öffnen und dort abschließen.
+    if (status === "abgesagt") {
+      const ev = events.find((e) => e.id === eventId);
+      if (ev) setPendingAbsage(ev);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setAtt((prev) => ({ ...prev, [eventId]: status }));
+    setReasons((prev) => {
+      const { [eventId]: _drop, ...rest } = prev;
+      return rest;
+    });
     try {
       await api.rsvp(eventId, player.id, status);
     } catch {
       load();
+    }
+  };
+
+  const submitAbsageWithReason = async (reason: string) => {
+    if (!player || !pendingAbsage) return;
+    const eventId = pendingAbsage.id;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setAtt((prev) => ({ ...prev, [eventId]: "abgesagt" }));
+    setReasons((prev) => ({ ...prev, [eventId]: reason }));
+    try {
+      await api.rsvp(eventId, player.id, "abgesagt", reason);
+      setPendingAbsage(null);
+    } catch {
+      // rollback optimistic update on network error
+      load();
+      throw new Error("rsvp failed");
     }
   };
 
@@ -231,9 +266,13 @@ export default function Termine() {
                   key={it.event.id}
                   event={it.event}
                   status={att[it.event.id]}
+                  reason={reasons[it.event.id]}
                   driving={!!driving[it.event.id]}
                   beer={!!beer[it.event.id]}
                   isAdmin={isAdmin}
+                  bierwartEmail={bierwartEmail}
+                  actorId={player?.id}
+                  onBierwartChanged={setBierwartEmail}
                   onEdit={() => setEditEvent(it.event)}
                   onOverview={() => router.push(`/event/${it.event.id}`)}
                   onZusagen={() => rsvp(it.event.id, "zugesagt")}
@@ -267,6 +306,13 @@ export default function Termine() {
           setEditEvent(null);
         }}
         onCreated={load}
+      />
+
+      <AbsageReasonModal
+        visible={!!pendingAbsage}
+        initial={pendingAbsage ? reasons[pendingAbsage.id] : ""}
+        onCancel={() => setPendingAbsage(null)}
+        onSubmit={submitAbsageWithReason}
       />
 
       {toast ? (

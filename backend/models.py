@@ -34,6 +34,7 @@ class RSVP(BaseModel):
     event_id: str
     player_id: str
     status: str  # "zugesagt" | "abgesagt"
+    reason: Optional[str] = None  # required when status == "abgesagt"
 
 
 class DrivingBody(BaseModel):
@@ -89,6 +90,7 @@ class EventCreate(BaseModel):
 
 
 class EventPatch(BaseModel):
+    type: Optional[str] = None  # allow coach to reclassify Spiel/Training/Treffen after the fact
     date: Optional[str] = None
     time: Optional[str] = None
     location: Optional[str] = None

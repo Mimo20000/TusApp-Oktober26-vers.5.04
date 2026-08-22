@@ -32,7 +32,7 @@ export type TeamEvent = {
   cancelled?: boolean;
 };
 
-export type Attendance = { event_id: string; player_id: string; status: string; driving?: boolean; beer?: boolean };
+export type Attendance = { event_id: string; player_id: string; status: string; reason?: string | null; driving?: boolean; beer?: boolean };
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -48,10 +48,10 @@ export const api = {
   events: () => req<TeamEvent[]>("/events"),
   attendance: () => req<Attendance[]>("/attendance"),
   stats: () => req<StatsResponse>("/stats"),
-  rsvp: (event_id: string, player_id: string, status: "zugesagt" | "abgesagt") =>
-    req<{ ok: boolean }>("/rsvp", {
+  rsvp: (event_id: string, player_id: string, status: "zugesagt" | "abgesagt", reason?: string) =>
+    req<{ ok: boolean; reason?: string | null }>("/rsvp", {
       method: "POST",
-      body: JSON.stringify({ event_id, player_id, status }),
+      body: JSON.stringify({ event_id, player_id, status, reason: reason ?? null }),
     }),
   setDriving: (event_id: string, player_id: string, driving: boolean) =>
     req<{ ok: boolean }>("/driving", {
@@ -94,6 +94,7 @@ export const api = {
   updateEvent: (
     event_id: string,
     body: {
+      type?: "Spiel" | "Training" | "Treffen";
       date?: string;
       time?: string;
       location?: string | null;
@@ -111,6 +112,12 @@ export const api = {
     req<EventOverview>(`/events/${event_id}/overview`),
   holidays: () => req<Holiday[]>("/holidays"),
   leagueTable: () => req<LeagueTable>("/league-table"),
+  getBierwart: () => req<{ email: string }>("/settings/bierwart"),
+  setBierwart: (email: string, actor_id: string) =>
+    req<{ ok: boolean; email: string }>("/settings/bierwart", {
+      method: "PATCH",
+      body: JSON.stringify({ email, actor_id }),
+    }),
   messages: (conversation_id: string) =>
     req<ChatMessage[]>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
   sendMessage: (
@@ -165,6 +172,7 @@ export const api = {
       body: JSON.stringify({ code, password }),
     }),
   fileRawUrl: (file_id: string) => `${BASE}/files/${file_id}/raw`,
+  fileThumbUrl: (file_id: string) => `${BASE}/files/${file_id}/thumbnail`,
   uploadFile: async (
     base64: string,
     filename: string,
@@ -201,6 +209,7 @@ export type EventOverviewPlayer = {
   jersey_number?: number | null;
   email?: string | null;
   rsvp: "zugesagt" | "abgesagt" | null;
+  reason?: string | null;
   driving: boolean;
   beer: boolean;
 };

@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "main": "expo-router/entry",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "scripts": {
     "preinstall": "./scripts/cmd-guard.js --preinstall",
     "start": "expo start",
@@ -20,6 +20,7 @@
     "dayjs": "1.11.13",
     "expo": "54.0.35",
     "expo-blur": "15.0.8",
+    "expo-clipboard": "~8.0.8",
     "expo-constants": "18.0.13",
     "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",

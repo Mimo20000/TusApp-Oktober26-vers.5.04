@@ -150,7 +150,7 @@ export default function Conversation() {
                 onPress={() => Linking.openURL(api.fileRawUrl(item.attachment!.file_id))}
               >
                 <Image
-                  source={{ uri: api.fileRawUrl(item.attachment.file_id) }}
+                  source={{ uri: api.fileThumbUrl(item.attachment.file_id) }}
                   style={styles.attachImg}
                   contentFit="cover"
                   transition={150}
