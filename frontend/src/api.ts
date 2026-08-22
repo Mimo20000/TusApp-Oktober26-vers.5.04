@@ -2,7 +2,7 @@ import { storage } from "@/src/utils/storage";
 
 const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
 const TOKEN_KEY = "tus.token";
-const PUBLIC_PATHS = new Set(["/players", "/holidays", "/league-table", "/"]);
+const PUBLIC_PATHS = new Set(["/holidays", "/league-table", "/"]);
 
 export type Player = {
   id: string;

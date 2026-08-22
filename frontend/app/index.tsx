@@ -180,7 +180,7 @@ export default function Login() {
         <Text style={styles.clubName}>TuS Oberhausen II</Text>
         <Text style={styles.subtitle}>Handball · Team-Verwaltung</Text>
         <View style={styles.versionPill}>
-          <Text style={styles.versionText}>Version 3.0</Text>
+          <Text style={styles.versionText}>Version 3.0.1</Text>
         </View>
       </View>
 

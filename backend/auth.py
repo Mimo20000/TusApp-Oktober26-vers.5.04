@@ -48,6 +48,31 @@ async def get_current_player_id(
     return sub
 
 
+async def get_optional_player_id(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> str | None:
+    """Same as get_current_player_id but returns None instead of raising 401.
+
+    Useful for endpoints that adjust their response shape based on whether
+    the caller is authenticated (e.g. the roster listing that hides PII
+    from the login-screen picker but reveals it to the logged-in team)."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        return None
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET,
+            algorithms=[JWT_ALG],
+            options={"require": ["exp", "sub"], "verify_sub": False},
+        )
+    except jwt.InvalidTokenError:
+        return None
+    sub = payload.get("sub")
+    if not isinstance(sub, str) or not sub:
+        return None
+    return sub
+
+
 async def require_coach(
     current_player_id: Annotated[str, Depends(get_current_player_id)],
 ) -> str:
@@ -59,6 +84,7 @@ async def require_coach(
 
 CurrentPlayer = Annotated[str, Depends(get_current_player_id)]
 CoachPlayer = Annotated[str, Depends(require_coach)]
+OptionalPlayer = Annotated[str | None, Depends(get_optional_player_id)]
 
 
 # ---------- Rate limiting (in-memory; suitable for single-process backend) ----------

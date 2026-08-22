@@ -13,6 +13,9 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - 18 players (name, position, status, email, birthdate, password_hash, push_token).
 - 12 games (Spiel) Oct 2026–Apr 2027 + weekly Thursday 19:00 trainings from today through 2031 + coach-added Treffen.
 
+## Fixed (2026-08, v3.0.1)
+- [x] **Kader "Speichern" macht die Änderungen wieder sichtbar**: `GET /api/players` lieferte PII (E-Mail, Geburtsdatum, Trikotnummer, SpielerID, Foto) nur an anonyme Login-Screen-Aufrufer und blendete sie für die Kader-Liste eingeloggter User aus. Neu: Auth-Header wird an `/players` mitgeschickt (`api.ts` PUBLIC_PATHS aktualisiert), Backend nutzt `OptionalPlayer`-Dependency und liefert die vollen Felder, wenn ein gültiger JWT vorliegt (`routers/players.py`, `auth.py`). Ergebnis: gespeicherte Trikotnummer/Geburtsdatum/SpielerID erscheinen sofort in der Karte und im Edit-Sheet.
+
 ## Implemented (2026-08, v3.0.1)
 - [x] **Version-Bump auf 3.0.1** in `app.json` und `public/sw.js` (`SW_VERSION`), damit PWA-Nutzer beim nächsten Besuch automatisch die neueste Version ziehen und ein neuer Android-Build (APK 3.0.1) erzeugt werden kann.
 - [x] Sitzungs-Handling: Bei 401-Antworten werden Token + Player-Cache automatisch verworfen und die App zeigt "Sitzung abgelaufen. Bitte erneut anmelden." (fix für "Spielerdaten nicht speicherbar" nach JWT-Rollout).
