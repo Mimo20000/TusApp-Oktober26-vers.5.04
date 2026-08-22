@@ -13,6 +13,19 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - 18 players (name, position, status, email, birthdate, password_hash, push_token).
 - 12 games (Spiel) Oct 2026–Apr 2027 + weekly Thursday 19:00 trainings from today through 2031 + coach-added Treffen.
 
+## Implemented (2026-08, v3.0.1)
+- [x] **Version-Bump auf 3.0.1** in `app.json` und `public/sw.js` (`SW_VERSION`), damit PWA-Nutzer beim nächsten Besuch automatisch die neueste Version ziehen und ein neuer Android-Build (APK 3.0.1) erzeugt werden kann.
+- [x] Sitzungs-Handling: Bei 401-Antworten werden Token + Player-Cache automatisch verworfen und die App zeigt "Sitzung abgelaufen. Bitte erneut anmelden." (fix für "Spielerdaten nicht speicherbar" nach JWT-Rollout).
+- [x] SpielerID (Handball360 SL-ID) Profilfeld editierbar via `PATCH /api/players/{id}/contact`.
+- [x] JWT-Sicherheits-Hardening: alle sensiblen Endpunkte via `Depends(get_current_player)`; keine Body-Spoofing-Identitäten mehr.
+- [x] Mandatory decline-reason + Auto-DM an Coach bei Absage.
+- [x] "Bringe Bier"-Button (Trainings) / "Ich fahre" nur bei Auswärtsspielen.
+- [x] Coach: Event-Typ nachträglich änderbar.
+- [x] RSVP-E-Mail-Reminder via `/unread`.
+- [x] Player-Fotos + Pillow-Thumbnails im Kader.
+- [x] Google-Maps-Route-Button bei Auswärtsspielen; Chat-Input über Soft-Keyboard (visualViewport-Hook).
+- [x] PayPal-Bierkasse via `paypal.me` deep-link (voll-integrierter Webhook-Capture pending → benötigt PayPal-Sandbox-Keys).
+
 ## Implemented (2026-07-27, v2.0)
 - [x] **PWA-fähig**: `/public/manifest.json` (id="Mimos App", name="Tus2 by Mimo 2.0"), Service Worker (`sw.js`) mit versionierten Caches (`tus2-mimo-2.0.0`), skipWaiting + clients.claim, controllerchange-Reload. Bestehende Installationen bekommen Updates automatisch, ohne Neu-Installation. Login-Screen zeigt "Version 2.0" Badge. Server-Daten (MongoDB) und Client-Session bleiben beim Update erhalten.
 - [x] **Google-Maps-Route-Button** neben Hallenname bei Auswärtsspielen (nicht bei Heimspielen, Training, Treffen, abgesagten Terminen). Testkennung `maps-<event_id>` in EventCard und `maps-detail-<event_id>` in Event-Detail. Öffnet Apple Maps auf iOS, Google Maps sonst.

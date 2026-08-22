@@ -155,8 +155,15 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
       }
       onSaved();
       onClose();
-    } catch {
-      setError("Speichern fehlgeschlagen.");
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      if (status === 401) {
+        setError("Sitzung abgelaufen. Bitte erneut anmelden.");
+      } else if (status === 403) {
+        setError("Nur der Trainer darf dies für andere Spieler ändern.");
+      } else {
+        setError("Speichern fehlgeschlagen. Bitte erneut versuchen.");
+      }
     } finally {
       setSaving(false);
     }

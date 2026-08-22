@@ -1,0 +1,35 @@
+{
+  "summary": "Bug report 'Spielerdaten sind nicht mehr speicherbar' could NOT be reproduced on preview. End-to-end verification confirms the save flow works correctly after iter-12 security hardening. Backend: 13/13 pytest cases pass in /app/backend/tests/test_iter13_player_save.py covering owner-self save (all 4 contact fields + partial email-only), Coach editing another player's contact/status/name/position, 401 (no token, invalid token), 403 (Josh -> Filip/contact, Josh -> /players/{id} PATCH, Josh -> /status), plus regression on chat/events/cashboxes. Frontend (mobile viewport, Playwright): logged in as josh-ankermann/pw12345, navigated to Kader, tapped own row, PlayerEditSheet opened, changed spieler_id + email, tapped save-player -> PATCH /api/players/josh-ankermann/contact went out with a valid Authorization: Bearer <JWT> header, backend returned 200, sheet closed, no error surfaced. Data persistence verified via /api/players/full (email=josh.ui@example.de, spieler_id=SL-UI-999). 401 error handling verified: with localStorage.removeItem('tus.token') AFTER sheet opened, subsequent save returned 401 and the sheet correctly displayed the German-worded 'Sitzung abgelaufen. Bitte erneut anmelden.' error banner (not the generic 'Speichern fehlgeschlagen'). 403 path is unreachable via UI (kader.tsx gates 'editable = isAdmin || player?.id === p.id') and is verified at API level. If a real user hit 'not saveable', likely cause is a stale (pre-iter-12) session token — the fix is to log out and back in; iter-12 already added the invalidation on 401 in api.ts and session.tsx probes /players/me on hydrate. No new bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_player_save.py",
+    "/app/test_reports/pytest/iter13.xml"
+  ],
+  "action_items": [
+    "No code changes required. Bug NOT reproducible on preview; save flow works end-to-end for owner-self and Coach roles with correct 401/403 error surfaces.",
+    "If the reporting user still cannot save on their device, ask them to: (a) log out via the header logout icon and log in again to get a fresh JWT, or (b) clear browser storage (localStorage.clear() + reload). Rationale: iter-12 rotated the JWT signing/subject expectations, so any token minted before that release is invalid; the current api.ts already handles this by clearing tus.token+tus.currentPlayerId+tus.currentPlayer on any 401, and session.tsx now probes /players/me at hydrate to catch it — but a user whose SPA session had NOT reloaded since deploy would still hold a stale token in-memory until reload.",
+    "Optional UX polish (carried over from iter-12): api.ts on 401 could also emit a session-invalidated signal so the sheet's parent can drop the user to /login without needing a manual reload. Currently the sheet shows 'Sitzung abgelaufen. Bitte erneut anmelden.' but there's no auto-navigation."
+  ],
+  "critical_code_review_comments": [
+    "PlayerEditSheet.tsx save() handler correctly distinguishes 401 vs 403 vs generic via the (e as {status?}).status thrown by api.ts req() — verified working. Good.",
+    "api.ts req() correctly attaches Bearer header for /players/{id}/contact (regex skipAuth only matches login/set-password/forgot/reset-password endpoints) — verified via Playwright network intercept.",
+    "kader.tsx line 126: editable = isAdmin || player?.id === p.id — Coach can tap any row; Player can only tap own row. Matches backend RBAC in players.py update_player_contact.",
+    "players.py update_player_contact accepts empty strings and coerces to None (email.strip() or None, jersey_number>0 else None) — matches PlayerEditSheet payload where cleared fields are sent as empty strings. Good.",
+    "session.tsx hydrate probe (/players/me) correctly clears stale token before rendering an authed screen — confirmed by 401 rehydrate test in iter-12."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter13_player_save.py (new — 13 test cases)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (owner-self save persisted, JWT attached, 401 error message rendered correctly, sheet close-on-success working)"},
+  "seed_data_creation": "None. All test writes were reverted (josh: email/birthdate/jersey/spieler_id back to null; filip: unchanged; temp Coach-created 'TEST Renamed' player deleted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter-13 regression file at /app/backend/tests/test_iter13_player_save.py. Reuse for any change touching /api/players/*. Josh JWT length is 136 chars (HS256). tus.token in localStorage is JSON-stringified (has quotes) — strip them before use in raw fetches. If a user reports 'save doesn't work', first check devtools Network on the PATCH /contact call: (1) is Authorization header attached? if no -> stale storage / user needs re-login. (2) if yes and status=401 -> token expired -> same fix. (3) if 403 -> user is not owner nor Coach and tried to edit someone else (should not be reachable via UI). (4) if 200 but user still sees no change -> the frontend onSaved() only re-fetches players via session.reloadPlayers() which uses public /players endpoint (no PII) — the Kader screen must call /players/full to see the newly-saved email; grep confirmed kader.tsx uses reloadFullPlayers so this is fine.",
+  "rca_of_issue": "Root-cause hypothesis for the user report: iter-12 introduced JWT auth on /players/{id}/contact. Any client session that was logged-in BEFORE the iter-12 deploy holds a legacy player-id-only session (no JWT in localStorage['tus.token']) or a JWT with old signing secret. Every save attempt now returns 401. The api.ts 401 handler clears the token, and on the next reload session.tsx's /players/me probe correctly bounces the user to login. But if the user never full-reloads after the deploy, they see the stale session UI, tap save, get 'Sitzung abgelaufen', and may not realize it means 'log out and back in'. Reproduction: manually remove localStorage['tus.token'] mid-session and tap save -> confirmed 401 -> 'Sitzung abgelaufen' shown. Mitigation: instruct the user to log out and log in again. Long-term: emit a global session-invalidated event on the first 401 so the UI can auto-redirect to login (also carried over as an optional item from iter-12)."
+}
