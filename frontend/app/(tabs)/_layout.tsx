@@ -30,8 +30,12 @@ export default function TabsLayout() {
       }
     };
     check();
+    // Re-check every 15s so a fresh Bierwart assignment shows up in the
+    // tab bar without requiring a re-login.
+    const iv = setInterval(check, 15000);
     return () => {
       cancelled = true;
+      clearInterval(iv);
     };
   }, [player?.id, player?.position]);
 

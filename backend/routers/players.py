@@ -92,6 +92,8 @@ async def update_player_contact(player_id: str, body: ContactUpdate):
         upd["jersey_number"] = body.jersey_number if body.jersey_number > 0 else None
     if body.avatar_file_id is not None:
         upd["avatar_file_id"] = body.avatar_file_id or None
+    if body.spieler_id is not None:
+        upd["spieler_id"] = body.spieler_id.strip() or None
     if not upd:
         raise HTTPException(status_code=400, detail="Keine Daten")
     res = await db.players.update_one({"id": player_id}, {"$set": upd})

@@ -12,6 +12,7 @@ class Player(BaseModel):
     email: Optional[str] = None
     birthdate: Optional[str] = None
     avatar_file_id: Optional[str] = None
+    spieler_id: Optional[str] = None  # externe SL-SpielerID (Handball4All / SpielPlusR)
     has_password: bool = False
 
 
@@ -58,6 +59,7 @@ class ContactUpdate(BaseModel):
     birthdate: Optional[str] = None
     jersey_number: Optional[int] = None
     avatar_file_id: Optional[str] = None
+    spieler_id: Optional[str] = None
 
 
 class PasswordBody(BaseModel):

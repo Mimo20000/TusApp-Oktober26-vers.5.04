@@ -9,6 +9,7 @@ export type Player = {
   email?: string | null;
   birthdate?: string | null;
   avatar_file_id?: string | null;
+  spieler_id?: string | null;
   has_password?: boolean;
 };
 
@@ -68,7 +69,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  updateContact: (player_id: string, body: { email?: string | null; birthdate?: string | null; jersey_number?: number | null; avatar_file_id?: string | null }) =>
+  updateContact: (player_id: string, body: { email?: string | null; birthdate?: string | null; jersey_number?: number | null; avatar_file_id?: string | null; spieler_id?: string | null }) =>
     req<{ ok: boolean }>(`/players/${player_id}/contact`, {
       method: "PATCH",
       body: JSON.stringify(body),

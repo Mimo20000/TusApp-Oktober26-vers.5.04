@@ -55,6 +55,7 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
   const [email, setEmail] = useState("");
   const [birthdate, setBirthdate] = useState("");
   const [jersey, setJersey] = useState("");
+  const [spielerId, setSpielerId] = useState("");
   const [avatarFileId, setAvatarFileId] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [status, setStatus] = useState<"Aktiv" | "Verletzt" | "Inaktiv">("Aktiv");
@@ -70,6 +71,7 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
       setEmail(player.email ?? "");
       setBirthdate(player.birthdate ?? "");
       setJersey(player.jersey_number != null ? String(player.jersey_number) : "");
+      setSpielerId(player.spieler_id ?? "");
       setAvatarFileId(player.avatar_file_id ?? "");
       setStatus((player.status as any) || "Aktiv");
       setConfirmDelete(false);
@@ -146,6 +148,7 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
         birthdate: birthdate.trim(),
         jersey_number: jerseyNum,
         avatar_file_id: avatarFileId || "",
+        spieler_id: spielerId.trim(),
       });
       if (isAdmin && status !== player.status) {
         await api.updateStatus(player.id, status);
@@ -279,6 +282,20 @@ export default function PlayerEditSheet({ visible, player, isAdmin, onClose, onS
                 inputMode="numeric"
                 maxLength={2}
               />
+
+              <Text style={styles.label}>SpielerID (SL)</Text>
+              <TextInput
+                testID="input-spieler-id"
+                style={styles.input}
+                value={spielerId}
+                onChangeText={setSpielerId}
+                placeholder="z. B. 1234567 (aus SpielPlusR / Handball360)"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={40}
+              />
+              <Text style={styles.hint}>Öffne Handball360 → dein Profil → oben unter deinem Namen findest du die SpielerID.</Text>
 
               {isAdmin ? (
                 <>
@@ -460,6 +477,7 @@ const styles = StyleSheet.create({
   statusChipText: { fontFamily: font.bold, fontSize: 13, color: colors.onSurfaceSecondary },
   dot: { width: 8, height: 8, borderRadius: 4 },
   error: { fontFamily: font.medium, fontSize: 13, color: colors.error, marginTop: spacing.md },
+  hint: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 6, lineHeight: 16 },
   saveBtn: {
     height: 52,
     borderRadius: radius.md,
