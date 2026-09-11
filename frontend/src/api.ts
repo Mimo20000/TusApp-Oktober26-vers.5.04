@@ -95,6 +95,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ event_id, player_id, status, reason: reason ?? null }),
     }),
+  rsvpReset: (event_id: string, player_id: string) =>
+    req<{ ok: boolean }>("/rsvp/reset", {
+      method: "POST",
+      body: JSON.stringify({ event_id, player_id }),
+    }),
   setDriving: (event_id: string, player_id: string, driving: boolean) =>
     req<{ ok: boolean }>("/driving", {
       method: "POST",

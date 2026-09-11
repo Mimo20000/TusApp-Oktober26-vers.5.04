@@ -162,12 +162,68 @@ export default function EventDetail() {
             <Section title="Bringt Bier 🍺" players={bier} emptyText="Noch kein Bier zugesagt." highlight />
           ) : null}
 
-          <Section title="Zusagen" players={zusagen} emptyText="Noch keine Zusagen." tint={colors.success} />
-          <Section title="Absagen" players={absagen} emptyText="Keine Absagen." tint={colors.error} />
-          <Section title="Offen" players={offen} emptyText="Alle haben geantwortet." tint={colors.muted} />
+          <Section
+            title="Zusagen"
+            players={zusagen}
+            emptyText="Noch keine Zusagen."
+            tint={colors.success}
+            isCoach={isCoach}
+            eventId={ev.id}
+            onChanged={load}
+          />
+          <Section
+            title="Absagen"
+            players={absagen}
+            emptyText="Keine Absagen."
+            tint={colors.error}
+            isCoach={isCoach}
+            eventId={ev.id}
+            onChanged={load}
+          />
+          <Section
+            title="Offen"
+            players={offen}
+            emptyText="Alle haben geantwortet."
+            tint={colors.muted}
+            isCoach={isCoach}
+            eventId={ev.id}
+            onChanged={load}
+          />
         </ScrollView>
       )}
     </View>
+  );
+}
+
+function CoachBtn({
+  icon,
+  active,
+  activeColor,
+  onPress,
+  disabled,
+  testID,
+}: {
+  icon: any;
+  active: boolean;
+  activeColor: string;
+  onPress: () => void;
+  disabled?: boolean;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.coachBtn,
+        active && { backgroundColor: activeColor, borderColor: activeColor },
+        (pressed || disabled) && { opacity: 0.65 },
+      ]}
+    >
+      <Ionicons name={icon} size={14} color={active ? colors.onBrand : colors.onSurfaceSecondary} />
+    </Pressable>
   );
 }
 
@@ -313,13 +369,42 @@ function Section({
   emptyText,
   tint,
   highlight,
+  isCoach,
+  eventId,
+  onChanged,
 }: {
   title: string;
   players: EventOverviewPlayer[];
   emptyText: string;
   tint?: string;
   highlight?: boolean;
+  isCoach?: boolean;
+  eventId?: string;
+  onChanged?: () => void;
 }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const setStatus = async (p: EventOverviewPlayer, next: "zugesagt" | "abgesagt" | null) => {
+    if (!eventId || busyId) return;
+    setBusyId(p.id);
+    try {
+      if (next === null) {
+        // Reset to "Offen" by clearing status directly.
+        await api.rsvpReset(eventId, p.id);
+      } else if (next === "abgesagt") {
+        // Coach quick-taps use a generic reason so the mandatory validation passes.
+        await api.rsvp(eventId, p.id, "abgesagt", p.reason || "Vom Coach eingetragen");
+      } else {
+        await api.rsvp(eventId, p.id, "zugesagt");
+      }
+      onChanged?.();
+    } catch (e) {
+      console.warn("[coach-rsvp] failed", e);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
@@ -363,7 +448,36 @@ function Section({
                   </Pressable>
                 ) : null}
               </View>
-              {p.position ? <Text style={styles.playerPos}>{p.position}</Text> : null}
+              {isCoach && eventId ? (
+                <View style={styles.coachActions} testID={`coach-actions-${p.id}`}>
+                  <CoachBtn
+                    icon="checkmark"
+                    active={p.rsvp === "zugesagt"}
+                    activeColor={colors.success}
+                    testID={`coach-yes-${p.id}`}
+                    disabled={busyId === p.id}
+                    onPress={() => setStatus(p, "zugesagt")}
+                  />
+                  <CoachBtn
+                    icon="close"
+                    active={p.rsvp === "abgesagt"}
+                    activeColor={colors.error}
+                    testID={`coach-no-${p.id}`}
+                    disabled={busyId === p.id}
+                    onPress={() => setStatus(p, "abgesagt")}
+                  />
+                  <CoachBtn
+                    icon="remove"
+                    active={p.rsvp === null || p.rsvp === undefined}
+                    activeColor={colors.muted}
+                    testID={`coach-clear-${p.id}`}
+                    disabled={busyId === p.id}
+                    onPress={() => setStatus(p, null)}
+                  />
+                </View>
+              ) : p.position ? (
+                <Text style={styles.playerPos}>{p.position}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -545,4 +659,15 @@ const styles = StyleSheet.create({
   emailBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   emailText: { fontFamily: font.medium, fontSize: 12, color: colors.brand, flexShrink: 1 },
   playerPos: { fontFamily: font.bold, fontSize: 12, color: colors.brand },
+  coachActions: { flexDirection: "row", gap: 4 },
+  coachBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceTertiary,
+  },
 });

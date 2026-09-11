@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from auth import CurrentPlayer
 from db import db
@@ -140,6 +141,28 @@ async def set_rsvp(rsvp: RSVP, current_player_id: CurrentPlayer):
         "status": rsvp.status,
         "reason": upd.get("reason"),
     }
+
+
+class RSVPReset(BaseModel):
+    event_id: str
+    player_id: str
+
+
+@router.post("/rsvp/reset")
+async def reset_rsvp(body: RSVPReset, current_player_id: CurrentPlayer):
+    """Clear a player's RSVP so the event shows them under 'Offen' again.
+
+    Regular players may only reset their own; the Coach can clear anyone's
+    (useful when a wrong tap needs to be undone in the roster view).
+    """
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
+        body.player_id = current_player_id
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {"$set": {"status": None, "reason": None}},
+        upsert=True,
+    )
+    return {"ok": True}
 
 
 @router.post("/driving")
