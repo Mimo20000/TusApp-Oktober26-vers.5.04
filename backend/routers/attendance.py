@@ -91,11 +91,18 @@ async def get_attendance(_current: CurrentPlayer):
     return docs
 
 
+async def _is_coach(player_id: str) -> bool:
+    p = await db.players.find_one({"id": player_id}, {"_id": 0, "position": 1})
+    return bool(p and (p.get("position") or "").lower() == "coach")
+
+
 @router.post("/rsvp")
 async def set_rsvp(rsvp: RSVP, current_player_id: CurrentPlayer):
-    # Ignore any client-supplied player_id — always use the token's subject.
+    # Regular players may only edit their own RSVP. The Coach may set the
+    # attendance for any player (e.g. entering it on paper at practice).
     if rsvp.player_id != current_player_id:
-        rsvp.player_id = current_player_id
+        if not await _is_coach(current_player_id):
+            rsvp.player_id = current_player_id
     if rsvp.status not in ("zugesagt", "abgesagt"):
         raise HTTPException(status_code=400, detail="Ungültiger Status")
     reason = (rsvp.reason or "").strip()
@@ -137,7 +144,8 @@ async def set_rsvp(rsvp: RSVP, current_player_id: CurrentPlayer):
 
 @router.post("/driving")
 async def set_driving(body: DrivingBody, current_player_id: CurrentPlayer):
-    if body.player_id != current_player_id:
+    # Coach may set another player's driving flag; everyone else only their own.
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
         body.player_id = current_player_id
     prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
     was = bool(prev.get("driving")) if prev else False
@@ -171,7 +179,8 @@ async def set_driving(body: DrivingBody, current_player_id: CurrentPlayer):
 
 @router.post("/beer")
 async def set_beer(body: BeerBody, current_player_id: CurrentPlayer):
-    if body.player_id != current_player_id:
+    # Coach may set another player's beer flag; everyone else only their own.
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
         body.player_id = current_player_id
     prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
     was = bool(prev.get("beer")) if prev else False

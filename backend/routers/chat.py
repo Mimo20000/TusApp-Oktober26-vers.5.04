@@ -9,12 +9,16 @@ from models import MessageBody, PushRegisterBody, ReadBody
 from push import direct_conv_id, notify_new_message
 from birthday import check_and_send_birthdays
 from reminders import check_and_send_rsvp_reminders
+from chat_retention import cleanup_old_chats_if_due
 
 router = APIRouter()
 
 
 @router.get("/messages")
 async def get_messages(conversation_id: str, _current: CurrentPlayer, limit: int = 200):
+    # Enforce the 14-day chat retention lazily on every fetch. Throttled
+    # internally to once every 6 hours so we don't hit MongoDB constantly.
+    await cleanup_old_chats_if_due()
     docs = await db.messages.find({"conversation_id": conversation_id}, {"_id": 0}).to_list(2000)
     docs.sort(key=lambda m: m["created_at"])
     return docs[-limit:]

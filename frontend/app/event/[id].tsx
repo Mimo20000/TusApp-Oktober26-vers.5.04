@@ -18,6 +18,7 @@ import { Platform } from "react-native";
 import { colors, spacing, radius, font } from "@/src/theme";
 import { api, EventOverview, EventOverviewPlayer } from "@/src/api";
 import { formatDate } from "@/src/ui";
+import { useSession } from "@/src/session";
 
 const CLUB = "TuS Oberhausen II";
 
@@ -34,6 +35,8 @@ export default function EventDetail() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { player } = useSession();
+  const isCoach = (player?.position ?? "").toLowerCase() === "coach";
   const [data, setData] = useState<EventOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

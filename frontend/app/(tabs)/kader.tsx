@@ -84,10 +84,20 @@ export default function Kader() {
     Linking.openURL(`mailto:${email}`);
   };
 
-  const filtered = useMemo(
-    () => players.filter((p) => (filter === "alle" ? true : p.status === filter)),
-    [players, filter]
-  );
+  const filtered = useMemo(() => {
+    // Status priority: Aktiv → Verletzt → Inaktiv. Within a status, keep the
+    // alphabetical order that the backend already returns so the list feels
+    // stable when players are toggled.
+    const rank: Record<string, number> = { Aktiv: 0, Verletzt: 1, Inaktiv: 2 };
+    return [...players]
+      .filter((p) => (filter === "alle" ? true : p.status === filter))
+      .sort((a, b) => {
+        const ra = rank[a.status] ?? 99;
+        const rb = rank[b.status] ?? 99;
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name, "de");
+      });
+  }, [players, filter]);
 
   return (
     <View style={styles.container}>
