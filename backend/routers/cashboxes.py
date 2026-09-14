@@ -23,6 +23,12 @@ from db import db
 router = APIRouter()
 
 
+MONTHS_DE = [
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember",
+]
+
+
 DEFAULT_BOXES = [
     {"key": "bierwart", "label": "Bierwart",
      "email": "lj-sascha@web.de", "recipient_player_id": "sascha-grins"},
@@ -52,6 +58,15 @@ async def _can_view_payments(actor_id: str) -> bool:
     return bool(hit)
 
 
+async def _can_manage_cashbox(actor_id: str, cashbox_key: str) -> bool:
+    """Coach may manage every cash box; a cash-box recipient may manage only
+    their own box (mark paid/open, add on behalf, delete)."""
+    if await _is_coach(actor_id):
+        return True
+    box = await db.cashboxes.find_one({"key": cashbox_key})
+    return bool(box and box.get("recipient_player_id") == actor_id)
+
+
 async def _attach_recipient(box: dict) -> dict:
     pid = box.get("recipient_player_id")
     if pid:
@@ -73,6 +88,11 @@ class PaymentCreate(BaseModel):
     amount: Optional[float] = None
     note: Optional[str] = None
     event_id: Optional[str] = None
+    payer_id: Optional[str] = None  # set by Bierwart/Coach to log on behalf
+
+
+class PaymentStatusUpdate(BaseModel):
+    status: str  # "open" | "completed"
 
 
 @router.get("/cashboxes")
@@ -116,22 +136,78 @@ async def log_payment(body: PaymentCreate, current_player_id: CurrentPlayer):
     box = await db.cashboxes.find_one({"key": body.cashbox_key})
     if not box:
         raise HTTPException(status_code=404, detail="Kasse nicht gefunden.")
-    payer = await db.players.find_one({"id": current_player_id})
+    payer_id = (body.payer_id or "").strip() or current_player_id
+    # Logging on behalf of another player is reserved for the cash-box
+    # recipient (Bierwart) or a coach.
+    if payer_id != current_player_id and not await _can_manage_cashbox(current_player_id, body.cashbox_key):
+        raise HTTPException(status_code=403, detail="Nur Kassenwart oder Trainer dürfen Einträge für andere anlegen.")
+    payer = await db.players.find_one({"id": payer_id})
     if not payer:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden.")
     doc = {
         "id": "PAY" + uuid.uuid4().hex[:12],
         "cashbox_key": body.cashbox_key,
-        "payer_id": current_player_id,
+        "payer_id": payer_id,
         "payer_name": payer.get("name"),
         "amount": float(body.amount) if body.amount else None,
         "note": (body.note or "").strip() or None,
         "event_id": body.event_id,
         "status": "open",
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": current_player_id,
     }
     await db.payments.insert_one(dict(doc))
     return doc
+
+
+@router.patch("/payments/{payment_id}")
+async def set_payment_status(payment_id: str, body: PaymentStatusUpdate, current_player_id: CurrentPlayer):
+    pay = await db.payments.find_one({"id": payment_id})
+    if not pay:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden.")
+    if body.status not in ("open", "completed"):
+        raise HTTPException(status_code=400, detail="Ungültiger Status.")
+    if not await _can_manage_cashbox(current_player_id, pay.get("cashbox_key")):
+        raise HTTPException(status_code=403, detail="Nur Kassenwart oder Trainer dürfen den Status ändern.")
+    upd = {"status": body.status}
+    if body.status == "completed":
+        upd["paid_at"] = datetime.now(timezone.utc).isoformat()
+        upd["paid_by"] = current_player_id
+    else:
+        upd["paid_at"] = None
+        upd["paid_by"] = None
+    await db.payments.update_one({"id": payment_id}, {"$set": upd})
+    return {k: v for k, v in {**pay, **upd}.items() if k != "_id"}
+
+
+@router.delete("/payments/{payment_id}")
+async def delete_payment(payment_id: str, current_player_id: CurrentPlayer):
+    pay = await db.payments.find_one({"id": payment_id})
+    if not pay:
+        raise HTTPException(status_code=404, detail="Eintrag nicht gefunden.")
+    if not await _can_manage_cashbox(current_player_id, pay.get("cashbox_key")):
+        raise HTTPException(status_code=403, detail="Nur Kassenwart oder Trainer dürfen Einträge löschen.")
+    await db.payments.delete_one({"id": payment_id})
+    return {"ok": True}
+
+
+@router.get("/payments/my-open")
+async def my_open_payments(current_player_id: CurrentPlayer):
+    """Own still-open balance, grouped per cash box. Available to every player
+    so the 'Kasse' dialog can pre-fill the amount they still owe."""
+    docs = await db.payments.find(
+        {"payer_id": current_player_id, "status": "open"}, {"_id": 0}
+    ).to_list(2000)
+    agg: dict = {}
+    total = 0.0
+    for d in docs:
+        k = d.get("cashbox_key")
+        a = agg.setdefault(k, {"cashbox_key": k, "total": 0.0, "count": 0})
+        a["count"] += 1
+        if d.get("amount"):
+            a["total"] += float(d["amount"])
+            total += float(d["amount"])
+    return {"by_cashbox": list(agg.values()), "total": total}
 
 
 @router.get("/payments")
@@ -150,4 +226,38 @@ async def list_payments(current_player_id: CurrentPlayer):
         s["count"] += 1
         if d.get("amount"):
             s["total"] += float(d["amount"])
-    return {"payments": docs, "sums": list(sums.values())}
+    # Monthly summary of still-OPEN payments so the Bierwart sees, at a glance,
+    # how much is outstanding per month. Aggregated across all cash boxes.
+    monthly: dict = {}
+    per_player: dict = {}
+    for d in docs:
+        if d.get("status") != "open":
+            continue
+        month = (d.get("created_at") or "")[:7]  # YYYY-MM
+        if len(month) == 7:
+            m = monthly.setdefault(month, {"month": month, "total": 0.0, "count": 0})
+            m["count"] += 1
+            if d.get("amount"):
+                m["total"] += float(d["amount"])
+        pid = d.get("payer_id")
+        pp = per_player.setdefault(pid, {"payer_id": pid, "payer_name": d.get("payer_name") or pid, "total": 0.0, "count": 0})
+        pp["count"] += 1
+        if d.get("amount"):
+            pp["total"] += float(d["amount"])
+    monthly_open = sorted(monthly.values(), key=lambda x: x["month"], reverse=True)
+    for m in monthly_open:
+        year, mm = m["month"].split("-")
+        m["month_label"] = f"{MONTHS_DE[int(mm) - 1]} {year}"
+    per_player_open = sorted(per_player.values(), key=lambda x: (-x["total"], -x["count"]))
+    # Which cash boxes may the current viewer manage (mark paid / add / delete)?
+    if await _is_coach(current_player_id):
+        manageable = list(boxes.keys())
+    else:
+        manageable = [k for k, b in boxes.items() if b.get("recipient_player_id") == current_player_id]
+    return {
+        "payments": docs,
+        "sums": list(sums.values()),
+        "monthly_open": monthly_open,
+        "per_player_open": per_player_open,
+        "manageable_cashboxes": manageable,
+    }

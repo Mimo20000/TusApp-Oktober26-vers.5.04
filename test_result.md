@@ -188,8 +188,8 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Birthdate: allow dates older than 1970"
-    - "Chat input text visible / not hidden behind keyboard"
+    - "Stats: past-only calculation + scope toggle (all/season) + streak"
+    - "Payments: monthly open-amount summary"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -212,3 +212,19 @@ agent_communication:
       remains visible/usable. (Keyboard-overlap avoidance is a native behavior and can't be fully tested
       on web; just confirm text visibility + send works.)
 
+    -agent: "main"
+    -message: >
+      NEW WORK to test (stats + Bierkasse management). Backend + frontend.
+      Credentials: sascha-grins/test1234 (Bierwart = cashbox recipient, can manage bierwart box),
+      josh-ankermann/pw12345 (normal player, NOT a recipient). Do NOT change michael-moser password.
+      BACKEND: (1) GET /api/stats?scope=all and ?scope=season — every metric must count PAST events
+      only (future events excluded); each player has a `streak` field; response has `scope`.
+      (2) GET /api/payments (as sascha) returns per_player_open, monthly_open, manageable_cashboxes(['bierwart']).
+      (3) POST /api/payments with payer_id — sascha may log on behalf for bierwart; josh gets 403 for others.
+      (4) PATCH /api/payments/{id} {status} — sascha may toggle bierwart entries; josh 403.
+      (5) DELETE /api/payments/{id} — sascha may delete bierwart entries; josh 403.
+      (6) GET /api/payments/my-open (as josh) returns own open balance grouped by cashbox.
+      FRONTEND: Statistik tab has "Alle Jahre/Dieses Jahr" scope chips + "Serie 🔥" mode; rates use past
+      events only. Zahlungen tab (login sascha) shows "Eintrag hinzufügen" button+modal (pick player+amount+note),
+      "Offen pro Spieler", and per-row "als bezahlt"/"offen" toggle + delete. Kasse button (login josh, tap
+      "Kasse" on an event) pre-fills the amount with josh's open balance ("Dein offener Betrag: X €").

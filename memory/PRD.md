@@ -71,6 +71,12 @@ German handball team app: player roster, trainings & match dates with confirm/de
 2. Event detail with per-player RSVP/driving/beer overview.
 
 ## Changelog (recent)
-- Treuster Spieler & Bier-Champion now computed over the FULL past history (all years/months), future events excluded; loyalty still counts only explicit Zusage/Absage. Highlights header renamed "Team-Bestenliste (gesamt)". (routers/stats.py, HighlightsCard.tsx)
-- PWA Service Worker v6.0.0: network-first for HTML+JS/CSS bundles (self-healing, no more stuck splash after release), cache-first only for images/icons. (public/sw.js)
-- PayPal: automatic API payment-capture cancelled by user; existing deep-link "PayPal öffnen"/Bierwart flow kept as-is (status="open").
+- Statistik: gesamte Berechnung jetzt NUR über vergangene Events (zukünftige Zusagen zählen erst ab Event-Datum). Neuer Zeitraum-Umschalter „Alle Jahre / Dieses Jahr" (scope=all|season) + neuer Modus „Serie 🔥" (aktuelle Zusage-Serie je Spieler). (routers/stats.py, statistik.tsx, api.ts)
+- Bierwart-Kassenliste: „als bezahlt" markieren (PATCH /api/payments/{id}), manuell Eintrag anlegen (POST mit payer_id), „Offen pro Spieler" + „Offene Beträge pro Monat", Eintrag löschen (DELETE). Nur Kassenwart-Empfänger + Coach dürfen verwalten. (routers/cashboxes.py, zahlungen.tsx, api.ts)
+- Kasse-Button füllt beim Öffnen automatisch den offenen Eigenbetrag des Spielers vor (GET /api/payments/my-open). (PaypalBierkasseButton.tsx)
+- Treuster Spieler & Bier-Champion über die gesamte Vergangenheit (alle Jahre/Monate); Highlights-Header „Team-Bestenliste (gesamt)".
+- PWA Service Worker v6.0.0: network-first für HTML+JS/CSS (self-healing, kein hängender Splash), cache-first nur für Bilder/Icons.
+- PayPal: automatischer API-Abgleich vom Nutzer abgebrochen; Deep-Link „PayPal öffnen"/Bierwart bleibt.
+
+## Backlog
+- Security-Audit (vom Nutzer freigegeben, aktuell zurückgestellt).

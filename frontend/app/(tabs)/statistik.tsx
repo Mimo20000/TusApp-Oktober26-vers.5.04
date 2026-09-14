@@ -15,7 +15,8 @@ import { colors, spacing, radius, font } from "@/src/theme";
 import { api, StatsResponse, PlayerStat } from "@/src/api";
 import { Header, Chips } from "@/src/ui";
 
-type Mode = "overall" | "games" | "trainings" | "gefahren" | "bier";
+type Mode = "overall" | "games" | "trainings" | "streak" | "gefahren" | "bier";
+type Scope = "all" | "season";
 
 export default function Statistik() {
   const insets = useSafeAreaInsets();
@@ -23,14 +24,15 @@ export default function Statistik() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mode, setMode] = useState<Mode>("overall");
+  const [scope, setScope] = useState<Scope>("all");
 
   const load = useCallback(async () => {
     try {
-      setData(await api.stats());
+      setData(await api.stats(scope));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scope]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -40,12 +42,14 @@ export default function Statistik() {
     setRefreshing(false);
   };
 
-  const isCount = mode === "gefahren" || mode === "bier";
+  const isCount = mode === "gefahren" || mode === "bier" || mode === "streak";
   const valueOf = (p: PlayerStat) =>
     mode === "games"
       ? p.games_rate
       : mode === "trainings"
       ? p.trainings_rate
+      : mode === "streak"
+      ? p.streak ?? 0
       : mode === "gefahren"
       ? p.driving_count
       : mode === "bier"
@@ -65,6 +69,8 @@ export default function Statistik() {
   const subOf = (p: PlayerStat) => {
     if (mode === "gefahren") return `${p.driving_count}× gefahren`;
     if (mode === "bier") return `${p.beer_count}× Bier gebracht`;
+    if (mode === "streak")
+      return (p.streak ?? 0) === 0 ? "Noch keine Serie" : `${p.streak}× in Folge zugesagt`;
     if (mode === "games") return `${p.games_confirmed} von ${p.games_total} zugesagt`;
     if (mode === "trainings") return `${p.trainings_confirmed} von ${p.trainings_total} zugesagt`;
     return `${p.overall_confirmed} von ${p.overall_total} zugesagt`;
@@ -77,7 +83,7 @@ export default function Statistik() {
 
   return (
     <View style={styles.container}>
-      <Header title="Statistik" subtitle="Beteiligung an Spielen & Trainings" />
+      <Header title="Statistik" subtitle="Nur gespielte Termine · Zukünftiges zählt nicht" />
       {loading ? (
         <ActivityIndicator color={colors.brand} style={{ marginTop: spacing["3xl"] }} />
       ) : (
@@ -88,6 +94,15 @@ export default function Statistik() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
           }
         >
+          <Chips
+            options={[
+              { key: "all", label: "Alle Jahre" },
+              { key: "season", label: "Dieses Jahr" },
+            ]}
+            value={scope}
+            onChange={setScope}
+          />
+
           <View style={styles.metricRow}>
             <MetricCard icon="pulse" value={`${teamAvg}%`} label="Ø Beteiligung" highlight />
             <MetricCard icon="trophy" value={String(data?.games_count ?? 0)} label="Spiele" />
@@ -99,6 +114,7 @@ export default function Statistik() {
               { key: "overall", label: "Gesamt" },
               { key: "games", label: "Spiele" },
               { key: "trainings", label: "Trainings" },
+              { key: "streak", label: "Serie 🔥" },
               { key: "gefahren", label: "Gefahren" },
               { key: "bier", label: "Bier gebracht" },
             ]}
@@ -116,7 +132,13 @@ export default function Statistik() {
                 <View style={{ flex: 1 }}>
                   <View style={styles.statHead}>
                     <Text style={styles.statName} numberOfLines={1}>{p.name}</Text>
-                    <Text style={styles.statPct}>{isCount ? `${valueOf(p)}×` : `${valueOf(p)}%`}</Text>
+                    <Text style={styles.statPct}>
+                      {mode === "streak"
+                        ? `${valueOf(p)} 🔥`
+                        : isCount
+                        ? `${valueOf(p)}×`
+                        : `${valueOf(p)}%`}
+                    </Text>
                   </View>
                   <View style={styles.barTrack}>
                     <View style={[styles.barFill, { width: `${Math.round((valueOf(p) / maxVal) * 100)}%` }]} />

@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 15 validates the Bierwart cash-box management + Kasse-prefill flows. Backend (18/18 pytest): (1) GET /api/payments as sascha-grins returns the new envelope keys per_player_open, monthly_open, manageable_cashboxes; manageable_cashboxes is exactly ['bierwart']; per_player_open rows reconstruct 1:1 from status=='open' payments (payer_id, count, total). (2) POST /api/payments with payer_id: sascha (bierwart recipient) can create on behalf of josh-ankermann in cashbox_key='bierwart' (200, status='open', amount echoed); sascha can also add for herself; josh (non-recipient) creating for sascha correctly returns 403; josh creating for himself returns 200. (3) PATCH /api/payments/{id}: sascha -> completed sets paid_by='sascha-grins' + paid_at, verified via subsequent GET; sascha -> open clears paid_by/paid_at; invalid status returns 400; josh gets 403. (4) DELETE /api/payments/{id}: sascha OK and record disappears from GET; josh gets 403. (5) GET /api/payments/my-open works for the normal player josh (returns {by_cashbox, total}) and requires auth. (6) /api/stats streak field present + numeric on every player; scope=season narrows correctly. Frontend (Playwright, mobile viewport 390×844): Sascha on Zahlungen tab -- 'Eintrag hinzufügen' button visible; sections 'Summe pro Kasse', 'Offen pro Spieler' (2 rows: Josh 2,00 € / 2 offen, Michael MOSER 0,00 € / 2 offen), 'Offene Beträge pro Monat' (Sep 2026 / Aug 2026), 'Verlauf' with 4 rows each carrying a toggle pill and trash button. Toggle pill flips from 'als bezahlt' → 'bezahlt ✓' (revert also worked). Add-entry modal opens (title 'Eintrag hinzufügen'), lists 18 player-pick rows plus Betrag + Notiz inputs and Speichern button. Statistik tab: header subtitle 'Nur gespielte Termine · Zukünftiges zählt nicht' rendered; 'Alle Jahre' + 'Dieses Jahr' chips both present and switching updates the metric cards; 'Serie 🔥' chip present -- selecting it shows '2 🔥 · 2× in Folge zugesagt' for Josh and '0 🔥 · Noch keine Serie' for the other 17 players. Josh Kasse-prefill: tapping the 'Kasse' pill on an event card opens 'Kasse wählen'; Bierwart auto-selected; Betrag (optional) is pre-filled with '2,00'; hint 'Dein offener Betrag: 2,00 €' displayed. No React Native red screens; only pre-existing benign warnings ('shadow*' style deprecation, expo-notifications web listener not supported) observed. No code changes required.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* styles", "issue": "Multiple RN Web deprecation warnings: 'shadow*' style props are deprecated. Use 'boxShadow'. Not blocking, but should be migrated in a follow-up. Reference: /app/frontend (search 'shadowColor'|'shadowOffset'|'shadowOpacity'|'shadowRadius')."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_payments_mgmt.py",
+    "/app/test_reports/pytest/iter15.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: migrate remaining shadow* style props to boxShadow (React Native Web deprecation warning). Non-blocking.",
+    "Nothing else to fix — every requested backend + frontend flow passes."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/cashboxes.py — _can_manage_cashbox correctly grants access to the recipient (`recipient_player_id == actor_id`) and every Coach; used consistently by POST-on-behalf, PATCH status and DELETE (single source of truth).",
+    "backend/routers/cashboxes.py — my_open_payments returns the 'by_cashbox' aggregation only for status='open' rows and is auth-only, so no leakage of other players' balances.",
+    "backend/routers/cashboxes.py — set_payment_status resets paid_by/paid_at to None when going back to 'open' (matches spec of 'mark back to open').",
+    "frontend/app/(tabs)/zahlungen.tsx — togglePaid + removeEntry set a busyId guard to prevent double-taps; on error the message resets. Row-level testIDs (`toggle-<id>`, `delete-<id>`, `perplayer-<id>`) are clean.",
+    "frontend/src/PaypalBierkasseButton.tsx — the amount prefill uses `myOpenPayments().by_cashbox` map lookup and re-computes on cash-box switch. Hint only shows when >0. Good UX.",
+    "frontend/app/(tabs)/statistik.tsx — Chips 'Serie 🔥' correctly gates the streak render + subtitle."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_payments_mgmt.py (new — 18 pytest cases covering /payments envelope, /my-open, on-behalf POST RBAC, PATCH status open<->completed + paid_by/paid_at, DELETE RBAC + persistence, and /stats streak/scope smoke)"
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% (Zahlungen add-modal + toggle + per-player + monthly + Statistik scope/serie + Kasse prefill='2,00' with hint all rendered)"},
+  "seed_data_creation": "Test-only payments created and deleted via API — module-level fixture removes them on teardown (no leftover 'TEST_iter15' rows).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_iter15_payments_mgmt.py for any change to cashbox/payment routes. Login helpers: Sascha=sascha-grins/test1234 (Bierwart recipient, manageable=['bierwart']), Josh=josh-ankermann/pw12345 (normal). Playwright login must use testID 'login-password' + 'login-submit' rather than role='button' since the Pressable is not exposed as a native button. Kasse buttons on event cards use testID='paypal-<event.id>' (NOT 'paypal-bierkasse' — that is the fallback for standalone use). To pick the Kasse *tab* vs the on-card Kasse pill, use `page.get_by_text('Kasse', exact=True).last` (there are hundreds of 'Kasse' occurrences)."
+}

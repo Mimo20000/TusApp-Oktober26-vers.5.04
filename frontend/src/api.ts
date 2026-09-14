@@ -89,7 +89,8 @@ export const api = {
   me: () => req<Player>("/players/me"),
   events: () => req<TeamEvent[]>("/events"),
   attendance: () => req<Attendance[]>("/attendance"),
-  stats: () => req<StatsResponse>("/stats"),
+  stats: (scope?: "all" | "season") =>
+    req<StatsResponse>(scope ? `/stats?scope=${scope}` : "/stats"),
   rsvp: (event_id: string, player_id: string, status: "zugesagt" | "abgesagt", reason?: string) =>
     req<{ ok: boolean; reason?: string | null }>("/rsvp", {
       method: "POST",
@@ -176,9 +177,24 @@ export const api = {
     amount?: number;
     note?: string;
     event_id?: string;
+    payer_id?: string;
   }) => req<Payment>("/payments", { method: "POST", body: JSON.stringify(body) }),
+  setPaymentStatus: (id: string, status: "open" | "completed") =>
+    req<Payment>(`/payments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  deletePayment: (id: string) =>
+    req<{ ok: boolean }>(`/payments/${id}`, { method: "DELETE" }),
+  myOpenPayments: () =>
+    req<{ by_cashbox: { cashbox_key: string; total: number; count: number }[]; total: number }>(
+      "/payments/my-open"
+    ),
   listPayments: () =>
-    req<{ payments: Payment[]; sums: PaymentSum[] }>("/payments"),
+    req<{
+      payments: Payment[];
+      sums: PaymentSum[];
+      monthly_open: MonthlyOpen[];
+      per_player_open: PerPlayerOpen[];
+      manageable_cashboxes: string[];
+    }>("/payments"),
   messages: (conversation_id: string) =>
     req<ChatMessage[]>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
   sendMessage: (
@@ -289,6 +305,20 @@ export type PaymentSum = {
   count: number;
 };
 
+export type MonthlyOpen = {
+  month: string;
+  month_label: string;
+  total: number;
+  count: number;
+};
+
+export type PerPlayerOpen = {
+  payer_id: string;
+  payer_name: string;
+  total: number;
+  count: number;
+};
+
 export type EventOverviewPlayer = {
   id: string;
   name: string;
@@ -386,6 +416,7 @@ export type PlayerStat = {
   past_rate?: number;
   driving_count: number;
   beer_count: number;
+  streak?: number;
   month_training_confirmed?: number;
   month_training_total?: number;
   month_training_rate?: number;
@@ -393,6 +424,7 @@ export type PlayerStat = {
 
 export type StatsResponse = {
   players: PlayerStat[];
+  scope?: string;
   games_count: number;
   trainings_count: number;
   past_games_count?: number;

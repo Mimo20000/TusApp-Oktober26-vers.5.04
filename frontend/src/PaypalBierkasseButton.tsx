@@ -41,6 +41,7 @@ export default function PaypalBierkasseButton({
   const [boxes, setBoxes] = useState<Cashbox[]>([]);
   const [loading, setLoading] = useState(false);
   const [amount, setAmount] = useState("");
+  const [openByBox, setOpenByBox] = useState<Record<string, number>>({});
   const [selectedKey, setSelectedKey] = useState<string>("bierwart");
   const [editing, setEditing] = useState<Cashbox | null>(null);
   const [editEmail, setEditEmail] = useState("");
@@ -51,7 +52,20 @@ export default function PaypalBierkasseButton({
   const load = async () => {
     setLoading(true);
     try {
-      setBoxes(await api.cashboxes());
+      const bx = await api.cashboxes();
+      setBoxes(bx);
+      // Pre-fill the amount with the player's own still-open balance for the
+      // selected cash box, so paying off what they owe is one tap away.
+      try {
+        const mo = await api.myOpenPayments();
+        const map: Record<string, number> = {};
+        mo.by_cashbox.forEach((b) => {
+          map[b.cashbox_key] = b.total;
+        });
+        setOpenByBox(map);
+        const pre = map[selectedKey] || 0;
+        setAmount(pre > 0 ? pre.toFixed(2).replace(".", ",") : "");
+      } catch {}
     } catch {
       setError("Kassen konnten nicht geladen werden.");
     } finally {
@@ -149,7 +163,11 @@ export default function PaypalBierkasseButton({
                     <Pressable
                       key={b.key}
                       testID={`cashbox-${b.key}`}
-                      onPress={() => setSelectedKey(b.key)}
+                      onPress={() => {
+                        setSelectedKey(b.key);
+                        const v = openByBox[b.key] || 0;
+                        setAmount(v > 0 ? v.toFixed(2).replace(".", ",") : "");
+                      }}
                       style={[styles.row, active && styles.rowActive]}
                     >
                       <View style={{ flex: 1 }}>
@@ -186,6 +204,11 @@ export default function PaypalBierkasseButton({
               keyboardType="decimal-pad"
               inputMode="decimal"
             />
+            {(openByBox[selectedKey] || 0) > 0 ? (
+              <Text style={styles.warn}>
+                Dein offener Betrag: {(openByBox[selectedKey] || 0).toFixed(2).replace(".", ",")} €
+              </Text>
+            ) : null}
             {selected && selected.email ? (
               <View style={styles.emailBox}>
                 <Text style={styles.emailText} selectable>
