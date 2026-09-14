@@ -4,11 +4,11 @@
   "version": "3.0.0",
   "scripts": {
     "preinstall": "./scripts/cmd-guard.js --preinstall",
-    "start": "expo start",
+    "start": "expo start --offline",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "android": "expo start --offline --android",
+    "ios": "expo start --offline --ios",
+    "web": "expo start --offline --web",
     "lint": "expo lint"
   },
   "dependencies": {

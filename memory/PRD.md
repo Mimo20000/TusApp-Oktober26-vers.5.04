@@ -80,3 +80,7 @@ German handball team app: player roster, trainings & match dates with confirm/de
 
 ## Backlog
 - Security-Audit (vom Nutzer freigegeben, aktuell zurückgestellt).
+
+## Deploy-Fixes
+- Build-Fehler (502 beim yarn-Fetch von `@expo-google-fonts/material-symbols`, transitive Abhängigkeit von expo-router→expo-symbols): yarn.lock von `registry.yarnpkg.com` auf `registry.npmjs.org` umgestellt (Versionen+Integrity unverändert, npmjs 200 + sha512 verifiziert), `registry` in `.npmrc` gesetzt. `yarn install` läuft nun ohne Fehler.
+- package.json Start-Skripte auf `expo start --offline` (start/android/ios/web) — Expo startet ohne Expo-Account-Login.
