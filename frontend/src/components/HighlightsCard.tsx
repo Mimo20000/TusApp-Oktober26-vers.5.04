@@ -47,7 +47,7 @@ export default function HighlightsCard() {
     >
       <View style={styles.headerRow}>
         <Ionicons name="trophy" size={16} color={colors.brand} />
-        <Text style={styles.headerText}>Diese Woche im Team</Text>
+        <Text style={styles.headerText}>Team-Bestenliste (gesamt)</Text>
       </View>
       <View style={styles.row}>
         {highlights.map((h) => (
@@ -69,16 +69,25 @@ export default function HighlightsCard() {
 
 function pickHighlights(players: PlayerStat[]): Highlight[] {
   const items: Highlight[] = [];
+  // Fairness: only rank on events that already happened. This excludes
+  // future-scheduled trainings/games so a player joining mid-season isn't
+  // punished for events they couldn't attend.
   const topLoyal = [...players]
-    .filter((p) => p.overall_total > 0)
-    .sort((a, b) => b.overall_rate - a.overall_rate || b.overall_confirmed - a.overall_confirmed)[0];
-  if (topLoyal && topLoyal.overall_confirmed > 0) {
+    .filter((p) => (p.past_total ?? 0) > 0)
+    .sort(
+      (a, b) =>
+        (b.past_rate ?? 0) - (a.past_rate ?? 0) ||
+        (b.past_confirmed ?? 0) - (a.past_confirmed ?? 0)
+    )[0];
+  if (topLoyal && (topLoyal.past_confirmed ?? 0) > 0) {
+    const confirmed = topLoyal.past_confirmed ?? 0;
+    const total = topLoyal.past_total ?? 0;
     items.push({
       icon: "medal",
       emoji: "🎖️",
       label: "Treuster Spieler",
       name: topLoyal.name,
-      suffix: `${topLoyal.overall_rate}% Anwesenheit`,
+      suffix: `${topLoyal.past_rate}% · ${confirmed}/${total}`,
       testID: "highlight-loyal",
     });
   }

@@ -3,7 +3,7 @@
 // existing installations receive the new bundle automatically without needing
 // to be re-installed. User data (login token in IndexedDB/localStorage) and
 // all server-side data (MongoDB) are NOT touched — only the offline cache.
-const SW_VERSION = "5.0.0";
+const SW_VERSION = "6.0.0";
 const CACHE = `tus2-mimo-${SW_VERSION}`;
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
@@ -41,23 +41,44 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  // Only handle our own origin — let cross-origin (e.g. backend API) pass through.
+  if (url.origin !== self.location.origin) return;
   // Never cache API traffic — always fresh.
   if (url.pathname.startsWith("/api/")) return;
-  // Network-first for HTML navigations so a new deployment is picked up
-  // the moment the user opens the app; fall back to cache offline.
-  if (req.mode === "navigate") {
+
+  const dest = req.destination;
+  // Treat HTML documents AND all executable code (JS bundles / CSS) as
+  // "must be fresh". Serving a stale JS bundle is exactly what makes the app
+  // hang on the splash screen after a new release, so we ALWAYS go to the
+  // network first for these and only fall back to cache when truly offline.
+  const isCodeOrDoc =
+    req.mode === "navigate" ||
+    dest === "document" ||
+    dest === "script" ||
+    dest === "style" ||
+    dest === "worker" ||
+    dest === "manifest" ||
+    /\.(js|css|map|json|bundle)(\?|$)/.test(url.pathname);
+
+  if (isCodeOrDoc) {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy));
+          }
           return res;
         })
-        .catch(() => caches.match(req).then((c) => c || caches.match("/")))
+        .catch(() =>
+          caches.match(req).then((c) => c || caches.match("/"))
+        )
     );
     return;
   }
-  // Cache-first for static assets (JS/CSS/images).
+
+  // Cache-first only for static media (images, fonts, icons) — these are
+  // safe to serve from cache and rarely change.
   event.respondWith(
     caches.match(req).then(
       (cached) =>

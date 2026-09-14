@@ -380,12 +380,22 @@ export type PlayerStat = {
   overall_confirmed: number;
   overall_total: number;
   overall_rate: number;
+  past_confirmed?: number;
+  past_declined?: number;
+  past_total?: number;
+  past_rate?: number;
   driving_count: number;
   beer_count: number;
+  month_training_confirmed?: number;
+  month_training_total?: number;
+  month_training_rate?: number;
 };
 
 export type StatsResponse = {
   players: PlayerStat[];
   games_count: number;
   trainings_count: number;
+  past_games_count?: number;
+  past_trainings_count?: number;
+  month_training_count?: number;
 };
