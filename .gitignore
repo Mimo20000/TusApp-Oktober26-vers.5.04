@@ -83,6 +83,9 @@ android-sdk/
 .env
 .env.*
 *.env
+# Deployment requires these runtime env files to be included in the build artifact
+!frontend/.env
+!backend/.env
 credentials.json
 *.key
 .credentials

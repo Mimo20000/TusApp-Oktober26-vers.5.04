@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.mobilefirststage.bnre6k"
+      "bundleIdentifier": "com.emergent.mobilefirststage.bnre6k",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Profilfoto aus deiner Galerie auswählen"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,6 +46,12 @@
       ],
       "expo-font",
       "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Profilfoto aus deiner Galerie auswählen"
+        }
+      ],
       "expo-secure-store",
       "expo-sharing",
       "expo-status-bar",
