@@ -160,6 +160,8 @@ export const api = {
     req<EventOverview>(`/events/${event_id}/overview`),
   holidays: () => req<Holiday[]>("/holidays"),
   leagueTable: () => req<LeagueTable>("/league-table"),
+  bwhvTeams: () => req<BwhvTeamsResponse>("/bwhv/teams"),
+  bwhvClass: (classId: string) => req<BwhvClass>(`/bwhv/class/${encodeURIComponent(classId)}`),
   getBierwart: () => req<{ email: string }>("/settings/bierwart"),
   setBierwart: (email: string) =>
     req<{ ok: boolean; email: string }>("/settings/bierwart", {
@@ -363,6 +365,57 @@ export type LeagueTable = {
   tournament: string | null;
   updated_at: string | null;
   rows: LeagueRow[];
+};
+
+export type BwhvTeam = {
+  class_id: string;
+  name: string;
+  short: string;
+  label: string;
+  gender: string;
+  team_name: string | null;
+  is_default: boolean;
+};
+
+export type BwhvTeamsResponse = { club: string; teams: BwhvTeam[] };
+
+export type BwhvStanding = {
+  rank: number | null;
+  team: string | null;
+  games: number | null;
+  won: number | null;
+  draw: number | null;
+  lost: number | null;
+  goals: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number | null;
+  points_str: string | null;
+  is_own: boolean;
+};
+
+export type BwhvGame = {
+  id: string;
+  date: string;
+  iso: string | null;
+  weekday: string;
+  time: string;
+  home: string;
+  guest: string;
+  home_goals: number | null;
+  guest_goals: number | null;
+  played: boolean;
+  is_home: boolean;
+  gym: string;
+  town: string;
+};
+
+export type BwhvClass = {
+  class_id: string;
+  class_name: string | null;
+  team_name: string | null;
+  table: BwhvStanding[];
+  games: BwhvGame[];
 };
 
 export type ChatMessage = {

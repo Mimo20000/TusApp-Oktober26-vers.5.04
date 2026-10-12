@@ -24,6 +24,13 @@ JWT_ALG = os.environ.get("JWT_ALGORITHM", "HS256")
 CLUB = "TuS Oberhausen II"
 HANDBALL_TEAM_ID = "handball4all.baden-wuerttemberg.1499726"
 
+# Official BWHV / handball4all identifiers (www.bwhv.org results portal).
+# ogId = Organisationsgruppe (216 = BWHV), club = TuS Oberhausen (773),
+# default class = Männer, 2. Bezirksklasse, Gruppe Süd (TuS Oberhausen 2).
+BWHV_ORG_GROUP = os.environ.get("BWHV_ORG_GROUP", "216")
+BWHV_CLUB_ID = os.environ.get("BWHV_CLUB_ID", "773")
+BWHV_DEFAULT_CLASS = os.environ.get("BWHV_DEFAULT_CLASS", "166871")
+
 
 def create_token(pid: str) -> str:
     return jwt.encode(
