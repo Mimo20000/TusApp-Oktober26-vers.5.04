@@ -6,25 +6,45 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Pressable,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
+import * as Haptics from "expo-haptics";
 
 import { colors, spacing, radius, font } from "@/src/theme";
-import { api, StatsResponse, PlayerStat } from "@/src/api";
-import { Header, Chips } from "@/src/ui";
+import { api, StatsResponse, PlayerStat, TeamEvent, Attendance } from "@/src/api";
+import { useSession } from "@/src/session";
+import { Header, Chips, formatDate } from "@/src/ui";
 
 type Mode = "overall" | "games" | "trainings" | "streak" | "gefahren" | "bier";
 type Scope = "all" | "season";
+type EditFilter = "open" | "all";
+type AttStatus = "zugesagt" | "abgesagt" | null;
 
 export default function Statistik() {
   const insets = useSafeAreaInsets();
+  const { player: me } = useSession();
+  const isCoach = (me?.position || "").toLowerCase() === "coach";
+
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [mode, setMode] = useState<Mode>("overall");
   const [scope, setScope] = useState<Scope>("all");
+
+  // Coach: retroactive attendance editor
+  const [editTarget, setEditTarget] = useState<PlayerStat | null>(null);
+  const [events, setEvents] = useState<TeamEvent[]>([]);
+  const [attMap, setAttMap] = useState<Record<string, AttStatus>>({});
+  const [reasonMap, setReasonMap] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [editLoading, setEditLoading] = useState(false);
+  const [editFilter, setEditFilter] = useState<EditFilter>("open");
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +101,97 @@ export default function Statistik() {
     return Math.round(data.players.reduce((s, p) => s + p.overall_rate, 0) / data.players.length);
   }, [data]);
 
+  // ── Coach editor ──────────────────────────────────────────────────────
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const pastEvents = useMemo(
+    () =>
+      events
+        .filter(
+          (e) =>
+            (e.type === "Spiel" || e.type === "Training") &&
+            !e.cancelled &&
+            (e.date || "") <= todayIso
+        )
+        .sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    [events, todayIso]
+  );
+
+  const openEditor = async (p: PlayerStat) => {
+    Haptics.selectionAsync();
+    setEditTarget(p);
+    setEditFilter("open");
+    setTouched(new Set());
+    if (events.length === 0) {
+      setEditLoading(true);
+      try {
+        const [ev, att] = await Promise.all([api.events(), api.attendance()]);
+        setEvents(ev);
+        const m: Record<string, AttStatus> = {};
+        const rm: Record<string, string> = {};
+        att.forEach((a: Attendance) => {
+          const k = `${a.player_id}|${a.event_id}`;
+          m[k] = (a.status as AttStatus) ?? null;
+          if (a.reason) rm[k] = a.reason;
+        });
+        setAttMap(m);
+        setReasonMap(rm);
+      } finally {
+        setEditLoading(false);
+      }
+    }
+  };
+
+  const closeEditor = async () => {
+    setEditTarget(null);
+    await load(); // leaderboard reflects the retroactive edits
+  };
+
+  const setStatus = async (eid: string, status: AttStatus) => {
+    if (!editTarget) return;
+    const key = `${editTarget.id}|${eid}`;
+    const prev = attMap[key] ?? null;
+    if (prev === status) return;
+    setSavingKey(key);
+    setAttMap((m) => ({ ...m, [key]: status })); // optimistic
+    setTouched((s) => new Set(s).add(eid)); // keep row visible in "Nur offene"
+    try {
+      await api.coachSetAttendance(
+        eid,
+        editTarget.id,
+        status,
+        status === "abgesagt" ? reasonMap[key] || "" : null
+      );
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      setAttMap((m) => ({ ...m, [key]: prev })); // revert on error
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const saveReason = async (eid: string) => {
+    if (!editTarget) return;
+    const key = `${editTarget.id}|${eid}`;
+    if ((attMap[key] ?? null) !== "abgesagt") return;
+    try {
+      await api.coachSetAttendance(eid, editTarget.id, "abgesagt", reasonMap[key] || "");
+    } catch {
+      // keep local text; coach can retry
+    }
+  };
+
+  const editRows = useMemo(() => {
+    if (!editTarget) return [];
+    return pastEvents.filter((e) => {
+      if (editFilter === "all") return true;
+      const st = attMap[`${editTarget.id}|${e.id}`] ?? null;
+      // "Nur offene": still show rows the coach just edited this session, so
+      // an absence reason can be typed right after marking abwesend.
+      return st === null || touched.has(e.id);
+    });
+  }, [editTarget, pastEvents, attMap, editFilter, touched]);
+
   return (
     <View style={styles.container}>
       <Header title="Statistik" subtitle="Nur gespielte Termine · Zukünftiges zählt nicht" />
@@ -124,33 +235,205 @@ export default function Statistik() {
 
           <View style={{ paddingHorizontal: spacing.lg }}>
             <Text style={styles.sectionTitle}>Rangliste</Text>
-            {ranked.map((p, i) => (
-              <View key={p.id} style={styles.statRow} testID={`stat-row-${p.id}`}>
-                <View style={[styles.rank, i < 3 && styles.rankTop]}>
-                  <Text style={[styles.rankText, i < 3 && { color: colors.onBrand }]}>{i + 1}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.statHead}>
-                    <Text style={styles.statName} numberOfLines={1}>{p.name}</Text>
-                    <Text style={styles.statPct}>
-                      {mode === "streak"
-                        ? `${valueOf(p)} 🔥`
-                        : isCount
-                        ? `${valueOf(p)}×`
-                        : `${valueOf(p)}%`}
-                    </Text>
+            {isCoach ? (
+              <Text style={styles.coachHint}>
+                <Ionicons name="create-outline" size={13} color={colors.brand} /> Tippe einen
+                Spieler, um die Anwesenheit nachzutragen.
+              </Text>
+            ) : null}
+            {ranked.map((p, i) => {
+              const RowContent = (
+                <>
+                  <View style={[styles.rank, i < 3 && styles.rankTop]}>
+                    <Text style={[styles.rankText, i < 3 && { color: colors.onBrand }]}>{i + 1}</Text>
                   </View>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { width: `${Math.round((valueOf(p) / maxVal) * 100)}%` }]} />
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.statHead}>
+                      <Text style={styles.statName} numberOfLines={1}>{p.name}</Text>
+                      <Text style={styles.statPct}>
+                        {mode === "streak"
+                          ? `${valueOf(p)} 🔥`
+                          : isCount
+                          ? `${valueOf(p)}×`
+                          : `${valueOf(p)}%`}
+                      </Text>
+                    </View>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFill, { width: `${Math.round((valueOf(p) / maxVal) * 100)}%` }]} />
+                    </View>
+                    <Text style={styles.statSub}>{subOf(p)}</Text>
                   </View>
-                  <Text style={styles.statSub}>{subOf(p)}</Text>
+                  {isCoach ? (
+                    <Ionicons name="create-outline" size={18} color={colors.muted} />
+                  ) : null}
+                </>
+              );
+              return isCoach ? (
+                <Pressable
+                  key={p.id}
+                  testID={`stat-edit-${p.id}`}
+                  onPress={() => openEditor(p)}
+                  style={({ pressed }) => [styles.statRow, pressed && { backgroundColor: colors.brandSecondary }]}
+                >
+                  {RowContent}
+                </Pressable>
+              ) : (
+                <View key={p.id} style={styles.statRow} testID={`stat-row-${p.id}`}>
+                  {RowContent}
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </ScrollView>
       )}
+
+      {/* Coach: retroactive attendance editor */}
+      <Modal
+        visible={!!editTarget}
+        animationType="slide"
+        transparent
+        onRequestClose={closeEditor}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]} testID="att-editor">
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetTitle} numberOfLines={1}>{editTarget?.name}</Text>
+                <Text style={styles.sheetSub}>Anwesenheit nachtragen · nur vergangene Termine</Text>
+              </View>
+              <Pressable testID="att-editor-close" onPress={closeEditor} style={styles.closeBtn} hitSlop={8}>
+                <Ionicons name="close" size={22} color={colors.onSurface} />
+              </Pressable>
+            </View>
+
+            <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+              <Chips
+                options={[
+                  { key: "open", label: "Nur offene" },
+                  { key: "all", label: "Alle Termine" },
+                ]}
+                value={editFilter}
+                onChange={setEditFilter}
+              />
+            </View>
+
+            {editLoading ? (
+              <ActivityIndicator color={colors.brand} style={{ marginVertical: spacing["2xl"] }} />
+            ) : editRows.length === 0 ? (
+              <View style={styles.emptyWrap}>
+                <Ionicons name="checkmark-done-outline" size={36} color={colors.muted} />
+                <Text style={styles.emptyText}>
+                  {editFilter === "open"
+                    ? "Keine offenen Termine — alles abgestimmt. 👍"
+                    : "Keine vergangenen Termine vorhanden."}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={{ maxHeight: 460 }}
+                contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}
+                showsVerticalScrollIndicator={false}
+              >
+                {editRows.map((e) => {
+                  const key = `${editTarget!.id}|${e.id}`;
+                  const cur = attMap[key] ?? null;
+                  const d = formatDate(e.date);
+                  return (
+                    <View key={e.id} style={styles.editItem}>
+                      <View style={styles.editRow}>
+                        <View style={styles.editDate}>
+                          <Ionicons
+                            name={e.type === "Spiel" ? "trophy" : "fitness"}
+                            size={13}
+                            color={e.type === "Spiel" ? colors.brand : colors.muted}
+                          />
+                          <Text style={styles.editDay}>{d.weekday} {d.day}.{d.month}</Text>
+                        </View>
+                        <Text style={styles.editLabel} numberOfLines={1}>
+                          {e.type === "Spiel" ? (e.opponent ? e.opponent : "Spiel") : "Training"}
+                        </Text>
+                        <View style={styles.triState}>
+                          <TriBtn
+                            icon="checkmark"
+                            active={cur === "zugesagt"}
+                            color={colors.success}
+                            busy={savingKey === key}
+                            onPress={() => setStatus(e.id, "zugesagt")}
+                            testID={`att-set-${e.id}-yes`}
+                          />
+                          <TriBtn
+                            icon="close"
+                            active={cur === "abgesagt"}
+                            color={colors.error}
+                            onPress={() => setStatus(e.id, "abgesagt")}
+                            testID={`att-set-${e.id}-no`}
+                          />
+                          <TriBtn
+                            icon="remove"
+                            active={cur === null}
+                            color={colors.muted}
+                            onPress={() => setStatus(e.id, null)}
+                            testID={`att-set-${e.id}-open`}
+                          />
+                        </View>
+                      </View>
+                      {cur === "abgesagt" ? (
+                        <View style={styles.reasonWrap}>
+                          <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.error} />
+                          <TextInput
+                            testID={`att-reason-${e.id}`}
+                            style={styles.reasonInput}
+                            value={reasonMap[key] ?? ""}
+                            onChangeText={(t) => setReasonMap((m) => ({ ...m, [key]: t }))}
+                            onEndEditing={() => saveReason(e.id)}
+                            onBlur={() => saveReason(e.id)}
+                            placeholder="Grund frei eintragen – z. B. krank, Arbeit, Urlaub"
+                            placeholderTextColor={colors.muted}
+                            returnKeyType="done"
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+function TriBtn({
+  icon,
+  active,
+  color,
+  onPress,
+  busy,
+  testID,
+}: {
+  icon: any;
+  active: boolean;
+  color: string;
+  onPress: () => void;
+  busy?: boolean;
+  testID?: string;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      disabled={busy}
+      style={[styles.triBtn, active && { backgroundColor: color, borderColor: color }]}
+    >
+      {busy ? (
+        <ActivityIndicator size="small" color={active ? colors.onBrand : color} />
+      ) : (
+        <Ionicons name={icon} size={18} color={active ? colors.onBrand : color} />
+      )}
+    </Pressable>
   );
 }
 
@@ -198,7 +481,14 @@ const styles = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: 16,
     color: colors.onSurface,
+    marginBottom: spacing.sm,
+  },
+  coachHint: {
+    fontFamily: font.medium,
+    fontSize: 12.5,
+    color: colors.onSurfaceSecondary,
     marginBottom: spacing.md,
+    lineHeight: 18,
   },
   statRow: {
     flexDirection: "row",
@@ -233,4 +523,88 @@ const styles = StyleSheet.create({
   },
   barFill: { height: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
   statSub: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 4 },
+
+  // Modal / editor
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.sm,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    marginBottom: spacing.sm,
+  },
+  sheetHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  sheetTitle: { fontFamily: font.extra, fontSize: 19, color: colors.onSurface },
+  sheetSub: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: 2 },
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSecondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyWrap: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing["3xl"], paddingHorizontal: spacing.xl },
+  emptyText: { fontFamily: font.medium, fontSize: 14, color: colors.muted, textAlign: "center" },
+  editItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: spacing.xs,
+  },
+  editRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  editDate: { width: 92, flexDirection: "row", alignItems: "center", gap: 4 },
+  editDay: { fontFamily: font.bold, fontSize: 12.5, color: colors.onSurface },
+  editLabel: { flex: 1, fontFamily: font.medium, fontSize: 13, color: colors.onSurfaceSecondary },
+  triState: { flexDirection: "row", gap: 6 },
+  reasonWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 4,
+    paddingBottom: spacing.sm,
+  },
+  reasonInput: {
+    flex: 1,
+    height: 38,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    fontFamily: font.regular,
+    fontSize: 13,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  triBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

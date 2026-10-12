@@ -101,6 +101,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ event_id, player_id }),
     }),
+  coachSetAttendance: (
+    event_id: string,
+    player_id: string,
+    status: "zugesagt" | "abgesagt" | null,
+    reason?: string | null
+  ) =>
+    req<{ ok: boolean }>("/attendance/coach-set", {
+      method: "POST",
+      body: JSON.stringify({ event_id, player_id, status, reason: reason ?? null }),
+    }),
   setDriving: (event_id: string, player_id: string, driving: boolean) =>
     req<{ ok: boolean }>("/driving", {
       method: "POST",

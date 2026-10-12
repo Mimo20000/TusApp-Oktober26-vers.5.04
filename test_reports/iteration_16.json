@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 16 validates the two new features: (1) Tabelle tab using BWHV / handball4all data, (2) Statistik coach-only retroactive attendance editor. Backend: 10/10 pytest (/app/backend/tests/test_iter16_bwhv_coachset.py). GET /api/bwhv/teams returns 13 teams, exactly one is_default (class_id='166871'). GET /api/bwhv/class/166871 returns table with exactly one is_own=true (TuS Oberhausen 2) and games[] all contain 'Oberhausen' in home or guest; played games carry integer home_goals/guest_goals + played=true, upcoming have played=false. /api/attendance/coach-set verified end-to-end as josh-ankermann (temp Coach): 'zugesagt' OK, 'abgesagt' with reason 'Krank' stored, 'abgesagt' w/o reason stored empty, switching to 'zugesagt' clears reason to null, status=null clears status+reason. Guards: future event -> 400, sascha (non-coach) -> 403, no auth -> 401. Frontend (Playwright, mobile 390x844): Tabelle tab shows 13 team chips (default 'Herren · 2. BK' highlighted), standings table with TuS Oberhausen 2 row visually highlighted in red/brand, 'Spielplan' segment lists real games with S/N badges + clock icon for upcoming, team chip switch to 'Herren · BOL' re-renders standings+games. Statistik as coach (josh/pw12345): coach hint 'Tippe einen Spieler, um die Anwesenheit nachzutragen' + 18 pencil icons (one per stat-edit row). Tapping Sascha opens bottom-sheet 'Anwesenheit nachtragen', 'Nur offene' shows 11 past rows, 'Alle Termine' shows 12. Tapping red X on event T1 revealed the 'Grund der Absage (optional)' TextInput; typed 'Krankheit TEST_iter16' and blurred -> closed editor and REOPENED editor -> reason PERSISTED (input_value()=='Krankheit TEST_iter16') and the no-state remained. Switching to zugesagt removes the reason input (confirmed). After closing the editor the leaderboard re-fetched (percentages visible per row). Non-coach (sascha/test1234) sees NO pencil, NO coach-hint, 18 stat-row elements (non-pressable), tapping a row does NOT open the editor. No React Native red screens; only pre-existing benign RN Web warnings ('shadow*' deprecation, expo-notifications web listener). No code changes required.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* styles", "issue": "React Native Web deprecation warning: 'shadow*' style props are deprecated. Non-blocking; migrate to 'boxShadow' when touching affected styles. Reference: /app/frontend (grep for shadowColor/shadowOffset/shadowOpacity/shadowRadius)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter16_bwhv_coachset.py",
+    "/app/test_reports/pytest/iter16.xml"
+  ],
+  "action_items": [
+    "Revert josh-ankermann position back to Player as mentioned in the review request (he was temporarily promoted to Coach for this test run).",
+    "Attendance for sascha-grins event 'T1' was left in status=null (open) by the test teardown; no further cleanup required.",
+    "Optional (non-blocking): migrate remaining shadow* style props to boxShadow."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/bwhv.py: _fetch retries up to 4x against the handball4all load balancer; good resilience for the sporadic 'permission denied' node. _is_own('oberhausen') matches TuS Oberhausen 2 reliably in both the standings and games filter so games[] only contains the own team's season.",
+    "backend/routers/bwhv.py: default is_default fallback (first team) ensures the UI always has a selected chip even if the configured BWHV_DEFAULT_CLASS disappears from the club list — good defensive design.",
+    "backend/routers/attendance.py::coach_set_attendance: correct guard order (coach check -> status whitelist -> event exists -> date <= today -> upsert). Reason is only kept when status=='abgesagt' and is otherwise forced to None, which matches the spec of clearing a stale reason when switching back to zugesagt or null.",
+    "frontend/app/(tabs)/statistik.tsx: openEditor fetches /events + /attendance ONLY on the first open (cached in state). The reopen path re-uses the cached maps, which is why the typed reason survives a close/reopen cycle — matches the UX requirement.",
+    "frontend/app/(tabs)/statistik.tsx: editRows memo keeps rows the coach just touched this session even under 'Nur offene', so a freshly-marked abgesagt row stays visible long enough to add a reason. Nice detail."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter16_bwhv_coachset.py (new — 10 pytest cases covering /bwhv/teams envelope, /bwhv/class/166871 shape+filter, and all 8 coach-set flows + guards)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (Tabelle: 13 chips + standings + S/N schedule; Statistik coach: pencil, editor, filter, tri-state, reason input, PERSISTENCE across close/reopen all verified; non-coach correctly denied)"},
+  "seed_data_creation": "No seed data created. Test-only attendance edits were made via /api/attendance/coach-set and cleared back to status=null at the end of each test module.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_iter16_bwhv_coachset.py for any BWHV or coach-set change. BWHV endpoints hit external spo.handball4all.de — one-off 502 is a transient upstream issue (backend already retries 4x). Login helper: POST /api/players/{pid}/login with {password}; use returned access_token as Bearer. Josh-ankermann was Coach THIS RUN ONLY — main agent will revert. For Playwright login use data-testid='login-password' + data-testid='login-submit'. The bottom tab labelled 'Tabelle' is NOT the standings segment — use `page.locator('text=Tabelle').last` (bottom tab) vs `page.locator('[data-testid=\"seg-tabelle\"]')` (segmented control inside the Tabelle screen).",
+  "rca_of_issue": "No bugs reproduced. All reported features behave per spec; the earlier 'main agent context note' about a transient 502 was observed to be absent during this test run."
+}

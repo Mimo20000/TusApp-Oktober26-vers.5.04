@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -163,6 +164,58 @@ async def reset_rsvp(body: RSVPReset, current_player_id: CurrentPlayer):
         upsert=True,
     )
     return {"ok": True}
+
+
+class CoachAttendance(BaseModel):
+    event_id: str
+    player_id: str
+    status: Optional[str] = None  # "zugesagt" | "abgesagt" | None (=offen)
+    reason: Optional[str] = None  # optional absence reason (only kept for abgesagt)
+
+
+@router.post("/attendance/coach-set")
+async def coach_set_attendance(body: CoachAttendance, current_player_id: CurrentPlayer):
+    """Coach-only retroactive attendance editing.
+
+    Lets the Coach fix who was present/absent for a PAST event — e.g. when a
+    player forgot to RSVP, or a wrong Zusage/Absage needs correcting. Unlike
+    the normal ``/rsvp`` flow this has NO side effects: no coach-DM, no team
+    chat announcement, and no mandatory reason. ``status=None`` clears it back
+    to "offen".
+    """
+    if not await _is_coach(current_player_id):
+        raise HTTPException(status_code=403, detail="Nur der Coach darf die Anwesenheit nachtragen.")
+    if body.status not in (None, "zugesagt", "abgesagt"):
+        raise HTTPException(status_code=400, detail="Ungültiger Status")
+    event = await db.events.find_one({"id": body.event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Termin nicht gefunden")
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    if (event.get("date") or "") > today_iso:
+        raise HTTPException(
+            status_code=400,
+            detail="Nur vergangene Termine können nachträglich gesetzt werden.",
+        )
+    reason = (body.reason or "").strip() if body.status == "abgesagt" else None
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {
+            "$set": {
+                "status": body.status,
+                "reason": reason,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "by_coach": body.status is not None,
+            }
+        },
+        upsert=True,
+    )
+    return {
+        "ok": True,
+        "event_id": body.event_id,
+        "player_id": body.player_id,
+        "status": body.status,
+        "reason": reason,
+    }
 
 
 @router.post("/driving")

@@ -228,3 +228,106 @@ agent_communication:
       events only. Zahlungen tab (login sascha) shows "Eintrag hinzufügen" button+modal (pick player+amount+note),
       "Offen pro Spieler", and per-row "als bezahlt"/"offen" toggle + delete. Kasse button (login josh, tap
       "Kasse" on an event) pre-fills the amount with josh's open balance ("Dein offener Betrag: X €").
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Session 2026-10-12: (A) BWHV/handball4all league table+schedule, (B) Coach retroactive attendance
+# ──────────────────────────────────────────────────────────────────────
+
+backend_session2:
+  - task: "BWHV/handball4all official league table + schedule"
+    implemented: true
+    working: true
+    file: "backend/routers/bwhv.py, backend/config.py, backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: >
+          New public endpoints (no auth). GET /api/bwhv/teams -> TuS Oberhausen classes from
+          handball4all (cmd=pcu, og=216, c=773); default class 166871 (Männer 2.BK, TuS Oberhausen 2).
+          GET /api/bwhv/class/{id} -> {class_name, team_name, table[], games[]} (cmd=ps). Table has
+          is_own flag; games filtered to the TuS team only (home/guest contains Oberhausen), with
+          played results + upcoming. Verified via curl. NOTE external source spo.handball4all.de can
+          occasionally answer 'permission denied' on one LB node -> backend retries 4x.
+  - task: "Coach retroactive attendance POST /api/attendance/coach-set"
+    implemented: true
+    working: true
+    file: "backend/routers/attendance.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: >
+          Coach-only, PAST-events-only, NO side effects (no coach-DM, no team chat, no mandatory
+          reason). Body {event_id, player_id, status: zugesagt|abgesagt|null}. status=null clears to
+          'offen'. Verified via generated JWTs: coach sets zugesagt/abgesagt(no reason)/null = ok;
+          future event -> 400; non-coach -> 403; no-auth -> 401.
+
+frontend_session2:
+  - task: "Tabelle tab: handball4all standings + schedule + team switcher"
+    implemented: true
+    working: true
+    file: "frontend/app/(tabs)/liga.tsx, frontend/src/api.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: >
+          'Tabelle' tab rebuilt. Team chips (Herren·2.BK default, Herren·BOL, Frauen, Minis, youth),
+          segmented Tabelle/Spielplan. Tabelle shows standings (TuS row highlighted). Spielplan shows
+          the team's games with results (S/N/U badge, winner score green) + upcoming (clock). Pull to
+          refresh. Verified via screenshots (both views render real data).
+  - task: "Statistik: Coach retroactive attendance editor"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/statistik.tsx, frontend/src/api.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: >
+          Coach only: leaderboard rows become tappable (pencil icon + hint). Tap a player -> bottom
+          sheet 'Anwesenheit nachtragen · nur vergangene Termine' with 'Nur offene'/'Alle Termine'
+          filter and per-event tri-state (anwesend=green check / abwesend=red X / offen=grey dash),
+          optimistic + persists via /attendance/coach-set. Closing reloads the leaderboard. Rendering
+          verified via screenshots; needs interaction/persistence retest.
+
+test_plan_session2:
+  current_focus:
+    - "GET /api/bwhv/teams and /api/bwhv/class/166871"
+    - "POST /api/attendance/coach-set guards (coach-only, past-only)"
+    - "Statistik Coach attendance editor (open, filter, set state, persist, leaderboard refresh)"
+    - "Tabelle tab switcher + Tabelle/Spielplan views"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: >
+      SESSION 2 — test two new features (backend + frontend).
+      CREDENTIALS NOTE: for THIS test run, josh-ankermann/pw12345 has been TEMPORARILY promoted to
+      position "Coach" so coach flows can be tested (main agent will revert him to "RA" afterwards).
+      sascha-grins/test1234 = normal player. Do NOT change michael-moser.
+      (A) TABELLE (handball4all): BACKEND GET /api/bwhv/teams (returns club + teams[], one is_default,
+      labels like 'Herren · 2. BK'); GET /api/bwhv/class/166871 (table[] with exactly one is_own=TuS
+      Oberhausen 2, games[] only TuS games, played ones have integer goals + played=true, upcoming
+      played=false). External source may be briefly flaky; treat a one-off 502 as retry, not failure.
+      FRONTEND 'Tabelle' tab: team chips switch classes; segmented 'Tabelle' shows standings with the
+      TuS row highlighted; 'Spielplan' lists TuS games with results/upcoming; pull-to-refresh works.
+      (B) COACH ATTENDANCE: BACKEND POST /api/attendance/coach-set as coach(josh) for a PAST event:
+      status zugesagt/abgesagt(no reason needed)/null all return ok; a FUTURE event returns 400;
+      as a non-coach it returns 403. FRONTEND Statistik tab (login josh=coach): each leaderboard row
+      shows a pencil + hint; tapping a player opens the editor sheet; 'Nur offene' vs 'Alle Termine'
+      filter works; tapping anwesend/abwesend/offen updates the tri-state and persists (reopen shows
+      kept value); closing the sheet refreshes the leaderboard percentages. Only PAST Spiele/Trainings
+      appear (no future, no cancelled).
