@@ -249,6 +249,11 @@ async def list_payments(current_player_id: CurrentPlayer):
         year, mm = m["month"].split("-")
         m["month_label"] = f"{MONTHS_DE[int(mm) - 1]} {year}"
     per_player_open = sorted(per_player.values(), key=lambda x: (-x["total"], -x["count"]))
+    # Team cash position at a glance: total still OPEN vs. already PAID.
+    open_total = sum(float(d["amount"]) for d in docs if d.get("status") == "open" and d.get("amount"))
+    open_count = sum(1 for d in docs if d.get("status") == "open")
+    paid_total = sum(float(d["amount"]) for d in docs if d.get("status") == "completed" and d.get("amount"))
+    paid_count = sum(1 for d in docs if d.get("status") == "completed")
     # Which cash boxes may the current viewer manage (mark paid / add / delete)?
     if await _is_coach(current_player_id):
         manageable = list(boxes.keys())
@@ -260,4 +265,10 @@ async def list_payments(current_player_id: CurrentPlayer):
         "monthly_open": monthly_open,
         "per_player_open": per_player_open,
         "manageable_cashboxes": manageable,
+        "totals": {
+            "open_total": round(open_total, 2),
+            "open_count": open_count,
+            "paid_total": round(paid_total, 2),
+            "paid_count": paid_count,
+        },
     }

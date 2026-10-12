@@ -206,6 +206,7 @@ export const api = {
       monthly_open: MonthlyOpen[];
       per_player_open: PerPlayerOpen[];
       manageable_cashboxes: string[];
+      totals: PaymentTotals;
     }>("/payments"),
   messages: (conversation_id: string) =>
     req<ChatMessage[]>(`/messages?conversation_id=${encodeURIComponent(conversation_id)}`),
@@ -307,6 +308,8 @@ export type Payment = {
   note?: string | null;
   event_id?: string | null;
   status: "open" | "completed";
+  paid_at?: string | null;
+  paid_by?: string | null;
   created_at: string;
 };
 
@@ -329,6 +332,13 @@ export type PerPlayerOpen = {
   payer_name: string;
   total: number;
   count: number;
+};
+
+export type PaymentTotals = {
+  open_total: number;
+  open_count: number;
+  paid_total: number;
+  paid_count: number;
 };
 
 export type EventOverviewPlayer = {

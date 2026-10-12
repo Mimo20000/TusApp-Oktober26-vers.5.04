@@ -31,6 +31,12 @@ export default function Zahlungen() {
   const [monthly, setMonthly] = useState<MonthlyOpen[]>([]);
   const [perPlayer, setPerPlayer] = useState<PerPlayerOpen[]>([]);
   const [manageable, setManageable] = useState<string[]>([]);
+  const [totals, setTotals] = useState<{
+    open_total: number;
+    open_count: number;
+    paid_total: number;
+    paid_count: number;
+  } | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [boxes, setBoxes] = useState<Cashbox[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +63,7 @@ export default function Zahlungen() {
       setMonthly(res.monthly_open || []);
       setPerPlayer(res.per_player_open || []);
       setManageable(res.manageable_cashboxes || []);
+      setTotals(res.totals || null);
       setAllowed(true);
       // Players + cash boxes power the manual add form (best effort).
       try {
@@ -89,6 +96,10 @@ export default function Zahlungen() {
 
   const canManage = manageable.length > 0;
   const manageBoxes = boxes.filter((b) => manageable.includes(b.key));
+  const paidHistory = payments
+    .filter((p) => p.status === "completed")
+    .sort((a, b) => (b.paid_at || "").localeCompare(a.paid_at || ""));
+  const fmtEuro = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 
   const togglePaid = async (p: Payment) => {
     if (busyId) return;
@@ -185,6 +196,20 @@ export default function Zahlungen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />}
         >
           {error ? <Text style={styles.err}>{error}</Text> : null}
+          {totals ? (
+            <View style={styles.standRow} testID="kassenstand">
+              <View style={[styles.standCard, styles.standOpen]}>
+                <Text style={styles.standLabel}>Offen</Text>
+                <Text style={styles.standValueOpen}>{fmtEuro(totals.open_total)}</Text>
+                <Text style={styles.standMeta}>{totals.open_count} Posten</Text>
+              </View>
+              <View style={[styles.standCard, styles.standPaid]}>
+                <Text style={styles.standLabel}>Bezahlt</Text>
+                <Text style={styles.standValuePaid}>{fmtEuro(totals.paid_total)}</Text>
+                <Text style={styles.standMeta}>{totals.paid_count} Posten</Text>
+              </View>
+            </View>
+          ) : null}
           {canManage ? (
             <Pressable testID="add-entry" onPress={openAdd} style={styles.addBtn}>
               <Ionicons name="add-circle-outline" size={18} color={colors.onBrand} />
@@ -233,6 +258,30 @@ export default function Zahlungen() {
                     <Text style={styles.sumTotal}>{m.total.toFixed(2).replace(".", ",")} €</Text>
                     <Text style={styles.sumMeta}>{m.count} offen</Text>
                   </View>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          {paidHistory.length > 0 ? (
+            <>
+              <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>Bezahlt-Historie</Text>
+              {paidHistory.map((p) => (
+                <View key={`paid-${p.id}`} style={styles.payRow} testID={`paid-${p.id}`}>
+                  <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.payTitle} numberOfLines={1}>{p.payer_name || p.payer_id}</Text>
+                    <Text style={styles.payMeta} numberOfLines={1}>
+                      Bezahlt am {p.paid_at ? new Date(p.paid_at).toLocaleDateString("de-DE") : "—"}
+                      {` · ${p.cashbox_label}`}
+                      {p.note ? ` · ${p.note}` : ""}
+                    </Text>
+                  </View>
+                  {p.amount != null ? (
+                    <Text style={styles.payAmountPaid}>{fmtEuro(p.amount)}</Text>
+                  ) : (
+                    <Text style={styles.payAmountDim}>—</Text>
+                  )}
                 </View>
               ))}
             </>
@@ -396,6 +445,21 @@ const styles = StyleSheet.create({
   sumLabel: { fontFamily: font.bold, fontSize: 14, color: colors.onSurface },
   sumTotal: { fontFamily: font.extra, fontSize: 16, color: colors.brand },
   sumMeta: { fontFamily: font.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
+  standRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  standCard: {
+    flex: 1,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    alignItems: "center",
+  },
+  standOpen: { backgroundColor: colors.brandSecondary, borderColor: colors.brand },
+  standPaid: { backgroundColor: colors.surface, borderColor: colors.success },
+  standLabel: { fontFamily: font.bold, fontSize: 12, color: colors.onSurfaceSecondary },
+  standValueOpen: { fontFamily: font.extra, fontSize: 22, color: colors.brand, marginTop: 4 },
+  standValuePaid: { fontFamily: font.extra, fontSize: 22, color: colors.success, marginTop: 4 },
+  standMeta: { fontFamily: font.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
+  payAmountPaid: { fontFamily: font.extra, fontSize: 14, color: colors.success },
   payRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   payTitle: { fontFamily: font.bold, fontSize: 14, color: colors.onSurface },
   payMeta: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 2 },

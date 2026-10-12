@@ -48,6 +48,7 @@ export default function Termine() {
   const [beer, setBeer] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingAbsage, setPendingAbsage] = useState<TeamEvent | null>(null);
+  const [openKasse, setOpenKasse] = useState<{ total: number; count: number }>({ total: 0, count: 0 });
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -78,13 +79,18 @@ export default function Termine() {
 
   const load = useCallback(async () => {
     try {
-      const [ev, attList, hol] = await Promise.all([
+      const [ev, attList, hol, myOpen] = await Promise.all([
         api.events(),
         api.attendance(),
         api.holidays().catch(() => [] as Holiday[]),
+        api.myOpenPayments().catch(() => ({ by_cashbox: [], total: 0 })),
       ]);
       setEvents(ev);
       setHolidays(hol);
+      setOpenKasse({
+        total: myOpen.total || 0,
+        count: (myOpen.by_cashbox || []).reduce((s, c) => s + (c.count || 0), 0),
+      });
       const mine: Record<string, string> = {};
       const mineDrive: Record<string, boolean> = {};
       const mineBeer: Record<string, boolean> = {};
@@ -255,6 +261,22 @@ export default function Termine() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />
           }
         >
+          {openKasse.total > 0 ? (
+            <View style={styles.kasseBanner} testID="kasse-reminder">
+              <View style={styles.kasseIcon}>
+                <Ionicons name="beer" size={20} color={colors.onBrand} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kasseTitle}>
+                  Offene Bierkasse: {openKasse.total.toFixed(2).replace(".", ",")} €
+                </Text>
+                <Text style={styles.kasseSub}>
+                  {(openKasse.count === 1 ? "1 offener Posten" : `${openKasse.count} offene Posten`) +
+                    " · bei einem Termin auf „Kasse“ tippen zum Zahlen"}
+                </Text>
+              </View>
+            </View>
+          ) : null}
           {feed.length === 0 ? (
             <EmptyState />
           ) : (
@@ -325,6 +347,27 @@ export default function Termine() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  kasseBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.brandSecondary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  kasseIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kasseTitle: { fontFamily: font.extra, fontSize: 15, color: colors.brand },
+  kasseSub: { fontFamily: font.regular, fontSize: 12, color: colors.onSurfaceSecondary, marginTop: 2 },
   fab: {
     position: "absolute",
     right: spacing.lg,

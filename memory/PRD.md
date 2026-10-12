@@ -95,3 +95,9 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - Quellcode-Scan: KEINE hartcodierten API-Keys/Tokens/Passwörter. Alle Secrets via `os.environ` (`JWT_SECRET`, `MONGO_URL`/`DB_NAME`, `RESEND_API_KEY`/`SENDER_EMAIL`). Abhängigkeiten vollständig (`requirements.txt` pip-freeze, `package.json` yarn).
 - Hinweis: `.gitignore` schließt `backend/.env` (+ `frontend/.env`) BEWUSST per `!`-Ausnahme ein (für Emergent-Deployment-Build). Da `backend/.env` `JWT_SECRET`+`MONGO_URL` enthält → bei „Save to GitHub" ein **privates** Repo nutzen und `JWT_SECRET` nach Export rotieren. `.gitignore`-Ausnahme NICHT entfernen (sonst Deploy-Bruch). Platzhalter-Minor: `DEFAULT_BIERWART_EMAIL` in `routers/misc.py` ist als Fallback hartcodiert (per DB-Setting überschreibbar; kein Secret).
 - SDK: App bleibt bewusst auf **Expo SDK 57** (stabil); kein Upgrade auf SDK 58 (Beta/RN 0.88) bis stabil & im Build-Umfeld unterstützt.
+
+## Implemented (2026-10-12, Kassen-Features)
+- [x] **Kassen-Erinnerung auf „Termine"**: Oben auf dem Termine-Screen sieht jeder Spieler einen Banner mit seinem offenen Bierkassen-Betrag (`GET /api/payments/my-open`), z. B. „Offene Bierkasse: 1,00 € · 1 offener Posten · bei einem Termin auf ‚Kasse' tippen zum Zahlen". Nur sichtbar wenn Betrag > 0. (`app/(tabs)/termine.tsx`)
+- [x] **Team-Kassenstand (oben in der Kasse)**: Zwei Karten „Offen" (rot) vs. „Bezahlt" (grün) mit Gesamtsumme + Postenzahl. Neues Feld `totals` in `GET /api/payments`. (`routers/cashboxes.py`, `app/(tabs)/zahlungen.tsx`, `src/api.ts`)
+- [x] **Bezahlt-Historie (Bierwart)**: Eigene Sektion listet alle als bezahlt markierten Einträge mit Name, Bezahl-Datum (`paid_at`), Kasse, Notiz und Betrag, sortiert nach Bezahldatum. (`app/(tabs)/zahlungen.tsx`)
+- Verifiziert: Backend-Totals + paid_at via curl; alle drei UIs via Screenshots (Banner, Kassenstand-Karten, Historie-Zeilen).
