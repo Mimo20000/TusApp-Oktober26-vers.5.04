@@ -195,6 +195,11 @@ export const api = {
     req<Payment>(`/payments/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   deletePayment: (id: string) =>
     req<{ ok: boolean }>(`/payments/${id}`, { method: "DELETE" }),
+  settleMonth: (month: string, cashbox_key?: string) =>
+    req<{ ok: boolean; count: number; total: number; month_label?: string }>(
+      "/payments/settle-month",
+      { method: "POST", body: JSON.stringify({ month, cashbox_key: cashbox_key ?? null }) }
+    ),
   myOpenPayments: () =>
     req<{ by_cashbox: { cashbox_key: string; total: number; count: number }[]; total: number }>(
       "/payments/my-open"

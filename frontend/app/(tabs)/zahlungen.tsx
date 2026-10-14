@@ -11,6 +11,7 @@ import {
   TextInput,
   Platform,
   Alert,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -114,6 +115,64 @@ export default function Zahlungen() {
     }
   };
 
+  const settleMonth = (m: MonthlyOpen) => {
+    const doSettle = async () => {
+      setBusyId(`month-${m.month}`);
+      try {
+        await api.settleMonth(m.month);
+        await load();
+      } catch {
+        setError("Monat konnte nicht abgerechnet werden.");
+      } finally {
+        setBusyId(null);
+      }
+    };
+    const msg = `Alle offenen Beträge aus ${m.month_label} (${m.count} ${
+      m.count === 1 ? "Posten" : "Posten"
+    }) als bezahlt markieren?`;
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(msg)) doSettle();
+    } else {
+      Alert.alert("Monat abrechnen", msg, [
+        { text: "Abbrechen", style: "cancel" },
+        { text: "Als bezahlt", onPress: doSettle },
+      ]);
+    }
+  };
+
+  const shareOverview = async () => {
+    const map = new Map<string, { name: string; open: number; paid: number }>();
+    payments.forEach((p) => {
+      const k = p.payer_id;
+      const e = map.get(k) || { name: p.payer_name || k, open: 0, paid: 0 };
+      if (p.amount) {
+        if (p.status === "open") e.open += p.amount;
+        else if (p.status === "completed") e.paid += p.amount;
+      }
+      map.set(k, e);
+    });
+    const rows = Array.from(map.values()).sort((a, b) => b.open - a.open || b.paid - a.paid);
+    const euro = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+    const today = new Date().toLocaleDateString("de-DE");
+    const lines = [
+      "🍺 TuS Oberhausen II – Kassenübersicht",
+      `Stand: ${today}`,
+      "",
+      `Offen gesamt: ${euro(totals?.open_total ?? 0)}`,
+      `Bezahlt gesamt: ${euro(totals?.paid_total ?? 0)}`,
+      "",
+      "Pro Spieler (offen · bezahlt):",
+      ...rows.map((r) => `• ${r.name}: ${euro(r.open)} offen · ${euro(r.paid)} bezahlt`),
+      "",
+      "— gesendet aus der TuS2 App",
+    ];
+    try {
+      await Share.share({ message: lines.join("\n") });
+    } catch {
+      // user cancelled or sharing unavailable
+    }
+  };
+
   const removeEntry = (p: Payment) => {
     const doDelete = async () => {
       setBusyId(p.id);
@@ -211,10 +270,16 @@ export default function Zahlungen() {
             </View>
           ) : null}
           {canManage ? (
-            <Pressable testID="add-entry" onPress={openAdd} style={styles.addBtn}>
-              <Ionicons name="add-circle-outline" size={18} color={colors.onBrand} />
-              <Text style={styles.addBtnText}>Eintrag hinzufügen</Text>
-            </Pressable>
+            <>
+              <Pressable testID="add-entry" onPress={openAdd} style={styles.addBtn}>
+                <Ionicons name="add-circle-outline" size={18} color={colors.onBrand} />
+                <Text style={styles.addBtnText}>Eintrag hinzufügen</Text>
+              </Pressable>
+              <Pressable testID="share-overview" onPress={shareOverview} style={styles.shareBtn}>
+                <Ionicons name="share-outline" size={18} color={colors.brand} />
+                <Text style={styles.shareBtnText}>Übersicht teilen</Text>
+              </Pressable>
+            </>
           ) : null}
           <Text style={styles.sectionTitle}>Summe pro Kasse</Text>
           {sums.length === 0 ? (
@@ -254,9 +319,28 @@ export default function Zahlungen() {
               {monthly.map((m) => (
                 <View key={m.month} style={styles.sumRow} testID={`monthly-${m.month}`}>
                   <Text style={styles.sumLabel}>{m.month_label}</Text>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.sumTotal}>{m.total.toFixed(2).replace(".", ",")} €</Text>
-                    <Text style={styles.sumMeta}>{m.count} offen</Text>
+                  <View style={styles.monthRight}>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.sumTotal}>{m.total.toFixed(2).replace(".", ",")} €</Text>
+                      <Text style={styles.sumMeta}>{m.count} offen</Text>
+                    </View>
+                    {canManage ? (
+                      <Pressable
+                        testID={`settle-${m.month}`}
+                        onPress={() => settleMonth(m)}
+                        disabled={busyId === `month-${m.month}`}
+                        style={styles.settleBtn}
+                      >
+                        {busyId === `month-${m.month}` ? (
+                          <ActivityIndicator size="small" color={colors.onBrand} />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-done" size={15} color={colors.onBrand} />
+                            <Text style={styles.settleBtnText}>Abhaken</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -460,6 +544,32 @@ const styles = StyleSheet.create({
   standValuePaid: { fontFamily: font.extra, fontSize: 22, color: colors.success, marginTop: 4 },
   standMeta: { fontFamily: font.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
   payAmountPaid: { fontFamily: font.extra, fontSize: 14, color: colors.success },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+  },
+  shareBtnText: { fontFamily: font.bold, fontSize: 14, color: colors.brand },
+  monthRight: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  settleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.success,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minWidth: 48,
+    justifyContent: "center",
+  },
+  settleBtnText: { fontFamily: font.bold, fontSize: 12, color: colors.onBrand },
   payRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   payTitle: { fontFamily: font.bold, fontSize: 14, color: colors.onSurface },
   payMeta: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 2 },

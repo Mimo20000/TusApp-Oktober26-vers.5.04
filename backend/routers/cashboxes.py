@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from auth import CoachPlayer, CurrentPlayer
 from db import db
+from push import direct_conv_id, notify_new_message
 
 router = APIRouter()
 
@@ -75,6 +76,39 @@ async def _attach_recipient(box: dict) -> dict:
             box["recipient_name"] = p.get("name")
             box["recipient_avatar_file_id"] = p.get("avatar_file_id")
     return box
+
+
+def _euro(amount) -> str:
+    if not amount:
+        return "0,00 €"
+    return f"{float(amount):.2f} €".replace(".", ",")
+
+
+async def _dm_to_player(actor_id: str, payer_id: str, text: str) -> None:
+    """Send an informational direct-chat message from the cash-box manager to a
+    player (e.g. 'your debt was marked as paid'). Skips self-pings."""
+    if not payer_id or payer_id == actor_id:
+        return
+    actor = await db.players.find_one({"id": actor_id}, {"_id": 0, "name": 1})
+    actor_name = (actor or {}).get("name") or "Kassenwart"
+    cid = direct_conv_id(actor_id, payer_id)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msg = {
+        "id": "MSG" + uuid.uuid4().hex[:10],
+        "conversation_id": cid,
+        "scope": "direct",
+        "sender_id": actor_id,
+        "sender_name": actor_name,
+        "text": text,
+        "created_at": now_iso,
+    }
+    await db.messages.insert_one(dict(msg))
+    await db.reads.update_one(
+        {"player_id": actor_id, "conversation_id": cid},
+        {"$set": {"last_read": now_iso}},
+        upsert=True,
+    )
+    await notify_new_message("direct", cid, actor_id, actor_name, text)
 
 
 class CashboxUpdate(BaseModel):
@@ -169,6 +203,7 @@ async def set_payment_status(payment_id: str, body: PaymentStatusUpdate, current
         raise HTTPException(status_code=400, detail="Ungültiger Status.")
     if not await _can_manage_cashbox(current_player_id, pay.get("cashbox_key")):
         raise HTTPException(status_code=403, detail="Nur Kassenwart oder Trainer dürfen den Status ändern.")
+    was = pay.get("status")
     upd = {"status": body.status}
     if body.status == "completed":
         upd["paid_at"] = datetime.now(timezone.utc).isoformat()
@@ -177,6 +212,15 @@ async def set_payment_status(payment_id: str, body: PaymentStatusUpdate, current
         upd["paid_at"] = None
         upd["paid_by"] = None
     await db.payments.update_one({"id": payment_id}, {"$set": upd})
+    # Notify the player in the chat the moment their debt is marked as paid.
+    if body.status == "completed" and was != "completed":
+        box = await db.cashboxes.find_one({"key": pay.get("cashbox_key")}, {"_id": 0, "label": 1})
+        box_label = (box or {}).get("label") or pay.get("cashbox_key")
+        text = f"✅ Bezahlt markiert: {_euro(pay.get('amount'))} · {box_label}"
+        if pay.get("note"):
+            text += f" · {pay['note']}"
+        text += "\nDanke fürs Zahlen! 🍺"
+        await _dm_to_player(current_player_id, pay.get("payer_id"), text)
     return {k: v for k, v in {**pay, **upd}.items() if k != "_id"}
 
 
@@ -189,6 +233,64 @@ async def delete_payment(payment_id: str, current_player_id: CurrentPlayer):
         raise HTTPException(status_code=403, detail="Nur Kassenwart oder Trainer dürfen Einträge löschen.")
     await db.payments.delete_one({"id": payment_id})
     return {"ok": True}
+
+
+class SettleMonthBody(BaseModel):
+    month: str  # "YYYY-MM"
+    cashbox_key: Optional[str] = None
+
+
+@router.post("/payments/settle-month")
+async def settle_month(body: SettleMonthBody, current_player_id: CurrentPlayer):
+    """Mark every still-OPEN payment of a given month as paid in one tap.
+
+    Scoped to the cash boxes the caller may manage (Coach = all, recipient =
+    own box). Notifies each affected player with a short chat summary.
+    """
+    month = (body.month or "").strip()
+    if len(month) != 7 or month[4] != "-" or not month.replace("-", "").isdigit():
+        raise HTTPException(status_code=400, detail="Ungültiger Monat (YYYY-MM).")
+    boxes = {b["key"]: b for b in await db.cashboxes.find({}, {"_id": 0}).to_list(50)}
+    if await _is_coach(current_player_id):
+        allowed = list(boxes.keys())
+    else:
+        allowed = [k for k, b in boxes.items() if b.get("recipient_player_id") == current_player_id]
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Nur Trainer und Kassenwarte dürfen abrechnen.")
+    if body.cashbox_key:
+        if body.cashbox_key not in allowed:
+            raise HTTPException(status_code=403, detail="Diese Kasse darfst du nicht abrechnen.")
+        allowed = [body.cashbox_key]
+    query = {
+        "status": "open",
+        "cashbox_key": {"$in": allowed},
+        "created_at": {"$regex": f"^{month}"},
+    }
+    open_docs = await db.payments.find(query, {"_id": 0}).to_list(5000)
+    if not open_docs:
+        return {"ok": True, "count": 0, "total": 0.0}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.payments.update_many(
+        query,
+        {"$set": {"status": "completed", "paid_at": now_iso, "paid_by": current_player_id}},
+    )
+    label = f"{MONTHS_DE[int(month.split('-')[1]) - 1]} {month.split('-')[0]}"
+    per_payer: dict = {}
+    for d in open_docs:
+        pp = per_payer.setdefault(d.get("payer_id"), {"count": 0, "total": 0.0})
+        pp["count"] += 1
+        if d.get("amount"):
+            pp["total"] += float(d["amount"])
+    for payer_id, info in per_payer.items():
+        total_s = f"{info['total']:.2f} €".replace(".", ",")
+        plural = "e" if info["count"] != 1 else ""
+        await _dm_to_player(
+            current_player_id,
+            payer_id,
+            f"✅ Abrechnung {label}: {info['count']} Beitrag{plural} ({total_s}) als bezahlt markiert. Danke! 🍺",
+        )
+    total = round(sum(float(d["amount"]) for d in open_docs if d.get("amount")), 2)
+    return {"ok": True, "count": len(open_docs), "total": total, "month_label": label}
 
 
 @router.get("/payments/my-open")
