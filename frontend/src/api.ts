@@ -172,6 +172,15 @@ export const api = {
   leagueTable: () => req<LeagueTable>("/league-table"),
   bwhvTeams: () => req<BwhvTeamsResponse>("/bwhv/teams"),
   bwhvClass: (classId: string) => req<BwhvClass>(`/bwhv/class/${encodeURIComponent(classId)}`),
+  getCarpool: (eventId: string) =>
+    req<{ event_id: string; seats: Record<string, number>; assignments: Record<string, string> }>(
+      `/carpool/${encodeURIComponent(eventId)}`
+    ),
+  saveCarpool: (eventId: string, seats: Record<string, number>, assignments: Record<string, string>) =>
+    req<{ event_id: string; seats: Record<string, number>; assignments: Record<string, string> }>(
+      `/carpool/${encodeURIComponent(eventId)}`,
+      { method: "PUT", body: JSON.stringify({ seats, assignments }) }
+    ),
   getBierwart: () => req<{ email: string }>("/settings/bierwart"),
   setBierwart: (email: string) =>
     req<{ ok: boolean; email: string }>("/settings/bierwart", {

@@ -331,3 +331,39 @@ agent_communication:
       filter works; tapping anwesend/abwesend/offen updates the tri-state and persists (reopen shows
       kept value); closing the sheet refreshes the leaderboard percentages. Only PAST Spiele/Trainings
       appear (no future, no cancelled).
+
+# ──────────────────────────────────────────────────────────────────────
+# Session 2026-10-24: Expo SDK 57 -> 58 upgrade (MAJOR)
+# ──────────────────────────────────────────────────────────────────────
+upgrade_sdk58:
+  - task: "Upgrade Expo SDK 57 -> 58 (RN 0.86->0.88, React 19.2->19.3, Reanimated 3->4 + worklets)"
+    implemented: true
+    working: true
+    file: "frontend/package.json, frontend/app/_layout.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: >
+          Ran `yarn expo install expo@^58` + `yarn expo install --fix`. expo-doctor 20/20 passed.
+          Web bundle OK (1509 modules). Fixed one SDK-58 lint issue: switched expo-splash-screen to
+          named imports (preventAutoHideAsync/hideAsync). Verified via screenshots: login (Version
+          5.0.4), Termine (Kasse-reminder + feed), Tabelle tab all render. Needs regression of
+          interactive flows (gestures/modals/keyboard/forms) under the new native stack.
+
+agent_communication:
+    -agent: "main"
+    -message: >
+      SESSION 3 — FRONTEND REGRESSION after major Expo SDK 58 upgrade (skip backend; backend
+      unchanged). Verify core flows still work on the new native stack (RN 0.88, Reanimated 4,
+      gesture-handler 3, screens 4): (1) Login as josh-ankermann/pw12345 (normal player). (2) Termine
+      tab: feed renders, open an event, tap Zusagen/Absagen (Absage opens reason sheet), Kasse-reminder
+      banner visible. (3) Chat tab: open team chat, send a message. (4) Kader tab renders roster.
+      (5) Statistik tab renders leaderboard + mode chips (Gesamt/Spiele/Serie/Bier). (6) Anwesenheit
+      tab (grid) renders. (7) Tabelle tab: team chips switch, Tabelle/Spielplan toggle, pull-to-refresh.
+      For Kasse-manager flows login sascha-grins/test1234 (Bierwart): Kasse tab shows Kassenstand cards,
+      'Übersicht teilen' + monthly 'Abhaken' buttons present. Do NOT attempt coach-only flows (coach
+      michael-moser password is user-set/unknown; coach features already validated in iteration 16/17).
+      Focus on crashes/blank screens/broken gestures/modals from the upgrade.

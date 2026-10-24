@@ -3,7 +3,7 @@
 // existing installations receive the new bundle automatically without needing
 // to be re-installed. User data (login token in IndexedDB/localStorage) and
 // all server-side data (MongoDB) are NOT touched — only the offline cache.
-const SW_VERSION = "6.0.0";
+const SW_VERSION = "6.0.1";
 const CACHE = `tus2-mimo-${SW_VERSION}`;
 const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 

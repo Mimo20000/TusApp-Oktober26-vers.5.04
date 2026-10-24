@@ -1,5 +1,5 @@
 import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
+import { preventAutoHideAsync, hideAsync } from "expo-splash-screen";
 import Constants from "expo-constants";
 import { useEffect } from "react";
 import { LogBox } from "react-native";
@@ -37,7 +37,7 @@ try {
 LogBox.ignoreAllLogs(true);
 
 // Keep the native splash visible from cold start until icon fonts register.
-SplashScreen.preventAutoHideAsync();
+preventAutoHideAsync();
 
 export default function RootLayout() {
   const [iconsLoaded, iconsError] = useIconFonts();
@@ -45,7 +45,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if ((iconsLoaded || iconsError) && (appLoaded || appError)) {
-      SplashScreen.hideAsync();
+      hideAsync();
     }
   }, [iconsLoaded, iconsError, appLoaded, appError]);
 

@@ -107,3 +107,10 @@ German handball team app: player roster, trainings & match dates with confirm/de
 - [x] **Monats-Abrechnung (1 Tipp)**: `POST /api/payments/settle-month {month: "YYYY-MM"}` markiert alle offenen Beträge eines Monats als bezahlt — gescoped auf verwaltbare Kassen (Coach=alle, Kassenwart=eigene). Benachrichtigt jeden betroffenen Spieler per Chat-Summary. Frontend: grüner „Abhaken"-Button je Monatszeile in der Kasse (mit Bestätigung). (`routers/cashboxes.py`, `app/(tabs)/zahlungen.tsx`, `src/api.ts settleMonth`)
 - [x] **Kassen-Export (teilen)**: Button „Übersicht teilen" in der Kasse (nur Verwalter) erzeugt einen Text (offen & bezahlt gesamt + pro Spieler) und öffnet das OS-Teilen-Menü via `react-native Share`. (`app/(tabs)/zahlungen.tsx shareOverview`)
 - Verifiziert: Backend curl (Paid-DM erstellt, settle-month count/total + 400/403-Guards), Frontend-Screenshots (Teilen-Button + Abhaken-Buttons). Testdaten sauber zurückgesetzt.
+
+## Implemented (2026-10-24)
+- [x] **Version 5.0.4** (app.json version, iOS buildNumber, Android versionCode 504, Login-Anzeige).
+- [x] **Expo SDK 57 → 58 Upgrade** (RN 0.86→0.88, React 19.2→19.3, Reanimated 3→4 + worklets, gesture-handler 3, screens 4, expo-router 58). `yarn expo install expo@^58` + `--fix`; expo-doctor 20/20; Web-Bundle OK. Fix: `expo-splash-screen` auf benannte Importe umgestellt. Frontend-Regression (iteration_17): 10/10 Kernflüsse grün.
+- [x] **Fix Chip-Collapse (SDK-58-Regression)**: `src/ui.tsx` Chips-ScrollView bekam `flexGrow:0, flexShrink:0` (Filter-Chips auf Termine/Kader waren auf 0 px zusammengefallen). Verifiziert.
+- [x] **Coach-Login repariert**: `michael-moser.password_hash` auf Wunsch des Nutzers entfernt → Coach legt beim nächsten Login ein neues Passwort selbst fest (Hinweis: echte E-Mail eintragen für Passwort-Wiederherstellung). Login-System selbst war intakt (401 = falsches Passwort), kein Code-Bug.
+- SDK-Upgrades sind NIE automatisch — immer bewusster manueller Schritt (Breaking Changes möglich).

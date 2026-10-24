@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Linking,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -157,7 +159,7 @@ export default function EventDetail() {
           {isGame ? (
             <Section title="Fahrgemeinschaft 🚗" players={fahrer} emptyText="Noch niemand fährt." highlight />
           ) : null}
-          {isAwayGame ? <RideShareSuggestion needsRide={needsRide} drivers={fahrer} /> : null}
+          {isAwayGame ? <CarpoolPlanner eventId={ev.id} needsRide={needsRide} drivers={fahrer} /> : null}
           {isTraining ? (
             <Section title="Bringt Bier 🍺" players={bier} emptyText="Noch kein Bier zugesagt." highlight />
           ) : null}
@@ -227,6 +229,123 @@ function CoachBtn({
   );
 }
 
+function CarpoolPlanner({
+  eventId,
+  needsRide,
+  drivers,
+}: {
+  eventId: string;
+  needsRide: EventOverviewPlayer[];
+  drivers: EventOverviewPlayer[];
+}) {
+  const [seats, setSeats] = useState<Record<string, number>>({});
+  const [assign, setAssign] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const c = await api.getCarpool(eventId);
+        if (!alive) return;
+        setSeats(c.seats || {});
+        setAssign(c.assignments || {});
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [eventId]);
+
+  const persist = (s: Record<string, number>, a: Record<string, string>) => {
+    setSeats(s); setAssign(a);
+    api.saveCarpool(eventId, s, a).catch(() => {});
+  };
+  const seatsOf = (id: string) => (seats[id] ?? 4);
+  const setSeat = (id: string, d: number) =>
+    persist({ ...seats, [id]: Math.max(1, Math.min(8, seatsOf(id) + d)) }, assign);
+  const setDriverFor = (pid: string, did: string | null) => {
+    const a = { ...assign };
+    if (did) a[pid] = did; else delete a[pid];
+    persist(seats, a);
+  };
+
+  const driverIds = new Set(drivers.map((d) => d.id));
+  const unassigned = needsRide.filter((p) => !assign[p.id] || !driverIds.has(assign[p.id]));
+
+  return (
+    <View style={styles.rideCard} testID="carpool-planner">
+      <View style={styles.rideHeader}>
+        <Ionicons name="car-sport" size={16} color={colors.brand} />
+        <Text style={styles.rideHeaderText}>Fahrgemeinschaft einteilen</Text>
+      </View>
+      {drivers.length === 0 ? (
+        <Text style={styles.rideEmpty}>Noch kein Fahrer – wer fährt, tippt beim Termin auf „Ich fahre".</Text>
+      ) : (
+        <>
+          {drivers.map((d) => {
+            const riders = needsRide.filter((p) => assign[p.id] === d.id);
+            const free = seatsOf(d.id) - riders.length;
+            return (
+              <View key={d.id} style={cp.driverBox} testID={`cp-driver-${d.id}`}>
+                <View style={cp.driverHead}>
+                  <Text style={cp.driverName} numberOfLines={1}>🚗 {d.name}</Text>
+                  <View style={cp.stepper}>
+                    <Pressable testID={`cp-seat-minus-${d.id}`} onPress={() => setSeat(d.id, -1)} style={cp.stepBtn}><Text style={cp.stepTxt}>−</Text></Pressable>
+                    <Text style={cp.seatCount}>{seatsOf(d.id)} Plätze</Text>
+                    <Pressable testID={`cp-seat-plus-${d.id}`} onPress={() => setSeat(d.id, 1)} style={cp.stepBtn}><Text style={cp.stepTxt}>+</Text></Pressable>
+                  </View>
+                </View>
+                <Text style={cp.freeTxt}>{free > 0 ? `${free} frei` : "voll"}</Text>
+                {riders.map((r) => (
+                  <Pressable key={r.id} testID={`cp-remove-${r.id}`} onPress={() => setDriverFor(r.id, null)} style={cp.riderRow}>
+                    <Text style={cp.riderName} numberOfLines={1}>{r.name}</Text>
+                    <Ionicons name="close-circle" size={16} color={colors.muted} />
+                  </Pressable>
+                ))}
+              </View>
+            );
+          })}
+          <View style={cp.divider} />
+          {unassigned.length === 0 ? (
+            <Text style={styles.rideEmpty}>Alle Mitfahrer sind eingeteilt ✅</Text>
+          ) : (
+            unassigned.map((p) => (
+              <View key={p.id} style={cp.assignRow} testID={`cp-assign-${p.id}`}>
+                <Text style={cp.assignName} numberOfLines={1}>{p.name} braucht Platz:</Text>
+                <View style={cp.assignBtns}>
+                  {drivers.map((d) => (
+                    <Pressable key={d.id} testID={`cp-set-${p.id}-${d.id}`} onPress={() => setDriverFor(p.id, d.id)} style={cp.assignBtn}>
+                      <Text style={cp.assignBtnTxt} numberOfLines={1}>{d.name.split(" ")[0]}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ))
+          )}
+        </>
+      )}
+    </View>
+  );
+}
+
+const cp = StyleSheet.create({
+  driverBox: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginTop: spacing.sm },
+  driverHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  driverName: { flex: 1, fontFamily: font.bold, fontSize: 14, color: colors.onSurface },
+  stepper: { flexDirection: "row", alignItems: "center", gap: 6 },
+  stepBtn: { width: 28, height: 28, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  stepTxt: { fontFamily: font.extra, fontSize: 16, color: colors.onSurface },
+  seatCount: { fontFamily: font.medium, fontSize: 12, color: colors.onSurfaceSecondary, minWidth: 58, textAlign: "center" },
+  freeTxt: { fontFamily: font.regular, fontSize: 11, color: colors.muted, marginTop: 2 },
+  riderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, marginTop: 6 },
+  riderName: { flex: 1, fontFamily: font.medium, fontSize: 13, color: colors.onSurface },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  assignRow: { marginBottom: spacing.sm },
+  assignName: { fontFamily: font.medium, fontSize: 13, color: colors.onSurface, marginBottom: 4 },
+  assignBtns: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  assignBtn: { backgroundColor: colors.brandSecondary, borderWidth: 1, borderColor: colors.brand, borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  assignBtnTxt: { fontFamily: font.bold, fontSize: 12, color: colors.brand, maxWidth: 110 },
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RideShareSuggestion({
   needsRide,
   drivers,
@@ -383,17 +502,22 @@ function Section({
   onChanged?: () => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reasonTarget, setReasonTarget] = useState<EventOverviewPlayer | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const [savingReason, setSavingReason] = useState(false);
 
   const setStatus = async (p: EventOverviewPlayer, next: "zugesagt" | "abgesagt" | null) => {
     if (!eventId || busyId) return;
+    if (next === "abgesagt") {
+      // Ask the coach for a free-text reason (mandatory), e.g. "Krank".
+      setReasonText(p.reason || "");
+      setReasonTarget(p);
+      return;
+    }
     setBusyId(p.id);
     try {
       if (next === null) {
-        // Reset to "Offen" by clearing status directly.
         await api.rsvpReset(eventId, p.id);
-      } else if (next === "abgesagt") {
-        // Coach quick-taps use a generic reason so the mandatory validation passes.
-        await api.rsvp(eventId, p.id, "abgesagt", p.reason || "Vom Coach eingetragen");
       } else {
         await api.rsvp(eventId, p.id, "zugesagt");
       }
@@ -405,7 +529,25 @@ function Section({
     }
   };
 
+  const confirmReason = async () => {
+    if (!eventId || !reasonTarget) return;
+    const reason = reasonText.trim();
+    if (!reason) return; // reason is mandatory
+    setSavingReason(true);
+    try {
+      await api.rsvp(eventId, reasonTarget.id, "abgesagt", reason);
+      setReasonTarget(null);
+      setReasonText("");
+      onChanged?.();
+    } catch (e) {
+      console.warn("[coach-rsvp] failed", e);
+    } finally {
+      setSavingReason(false);
+    }
+  };
+
   return (
+    <>
     <View style={styles.section}>
       <View style={styles.sectionHead}>
         <Text style={styles.sectionTitle}>{title}</Text>
@@ -483,8 +625,88 @@ function Section({
         </View>
       )}
     </View>
+
+    <Modal
+      visible={!!reasonTarget}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setReasonTarget(null)}
+    >
+      <Pressable style={rStyles.backdrop} onPress={() => setReasonTarget(null)}>
+        <Pressable style={rStyles.card} onPress={() => {}}>
+          <Text style={rStyles.title}>Grund der Absage</Text>
+          <Text style={rStyles.sub} numberOfLines={1}>{reasonTarget?.name}</Text>
+          <TextInput
+            testID="coach-reason-input"
+            style={rStyles.input}
+            value={reasonText}
+            onChangeText={setReasonText}
+            placeholder="z. B. krank, Arbeit, Urlaub …"
+            placeholderTextColor={colors.muted}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={confirmReason}
+          />
+          <View style={rStyles.actions}>
+            <Pressable style={[rStyles.btn, rStyles.btnCancel]} onPress={() => setReasonTarget(null)}>
+              <Text style={rStyles.btnCancelText}>Abbrechen</Text>
+            </Pressable>
+            <Pressable
+              testID="coach-reason-save"
+              style={[rStyles.btn, rStyles.btnSave, (!reasonText.trim() || savingReason) && rStyles.btnDisabled]}
+              disabled={!reasonText.trim() || savingReason}
+              onPress={confirmReason}
+            >
+              {savingReason ? (
+                <ActivityIndicator size="small" color={colors.onBrand} />
+              ) : (
+                <Text style={rStyles.btnSaveText}>Speichern</Text>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
+
+const rStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  title: { fontFamily: font.extra, fontSize: 17, color: colors.onSurface },
+  sub: { fontFamily: font.regular, fontSize: 13, color: colors.muted, marginTop: 2, marginBottom: spacing.md },
+  input: {
+    height: 46,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    fontFamily: font.regular,
+    fontSize: 15,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg },
+  btn: { flex: 1, height: 46, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
+  btnCancel: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  btnCancelText: { fontFamily: font.bold, fontSize: 14, color: colors.onSurfaceSecondary },
+  btnSave: { backgroundColor: colors.brand },
+  btnSaveText: { fontFamily: font.bold, fontSize: 14, color: colors.onBrand },
+  btnDisabled: { opacity: 0.5 },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surfaceSecondary },

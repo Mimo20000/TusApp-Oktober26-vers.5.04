@@ -104,7 +104,7 @@ export function Chips<T extends string>({
 }
 
 const chipStyles = StyleSheet.create({
-  scroller: { maxHeight: 56 },
+  scroller: { maxHeight: 56, flexGrow: 0, flexShrink: 0 },
   row: {
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
