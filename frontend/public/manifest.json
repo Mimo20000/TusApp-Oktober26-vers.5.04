@@ -1,8 +1,8 @@
 {
   "id": "Mimos App",
-  "name": "Tus2 by Mimo 3.0",
+  "name": "Tus2 by Mimo 5.0.6",
   "short_name": "Mimo",
-  "description": "Team-Verwaltung tus 2 – Version 3.0",
+  "description": "Team-Verwaltung tus 2 – Version 5.0.6",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
