@@ -183,9 +183,7 @@ async def set_password(player_id: str, body: PasswordBody):
     p = await db.players.find_one({"id": player_id})
     if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    if p.get("password_hash"):
-        raise HTTPException(status_code=400, detail="Passwort bereits gesetzt")
-    if len(body.password) < 4:
+       if len(body.password) < 4:
         raise HTTPException(status_code=400, detail="Passwort muss mind. 4 Zeichen haben")
     await db.players.update_one(
         {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(body.password)}}
