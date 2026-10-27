@@ -2,7 +2,7 @@ import { storage } from "@/src/utils/storage";
 
 const BASE = "https://tusapp-oktober26-vers-5-03.onrender.com/api";
 const TOKEN_KEY = "tus.token";
-const PUBLIC_PATHS = new Set(["/holidays", "/league-table", "/"]);
+const PUBLIC_PATHS = new Set(["/players", "/holidays", "/league-table", "/"]);
 
 export type Player = {
   id: string;
