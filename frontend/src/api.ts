@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
+const BASE = "https://tusapp-oktober26-vers-5-03.onrender.com/api";
 const TOKEN_KEY = "tus.token";
 const PUBLIC_PATHS = new Set(["/holidays", "/league-table", "/"]);
 
