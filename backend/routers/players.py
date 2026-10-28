@@ -45,15 +45,6 @@ async def _is_coach(pid: str) -> bool:
 
 @router.get("/players", response_model=List[Player])
 async def get_players(current_player_id: OptionalPlayer):
-    """Roster listing.
-
-    - Anonymous callers (login-screen picker) receive only the minimal fields
-      needed to render the name list; personal data (email, birthdate,
-      jersey_number, avatar_file_id, spieler_id) is stripped.
-    - Authenticated callers receive the full player records so the Kader tab,
-      chat, and event details can render contact info, jersey badges and
-      avatar thumbnails.
-    """
     docs = await db.players.find({}, {"_id": 0}).to_list(500)
     for d in docs:
         d["has_password"] = bool(d.get("password_hash"))
@@ -77,9 +68,6 @@ async def get_me(current_player_id: CurrentPlayer):
 
 @router.get("/players/full", response_model=List[Player])
 async def get_players_full(_current: CurrentPlayer):
-    """Authenticated roster including personal data. Every field needed for
-    the Kader/Chat screens is here; the anonymous /players endpoint only
-    returns the login-picker minimum."""
     docs = await db.players.find({}, {"_id": 0}).to_list(500)
     for d in docs:
         d["has_password"] = bool(d.get("password_hash"))
@@ -100,82 +88,88 @@ async def create_player(body: PlayerCreate, _coach: CoachPlayer):
         n += 1
         pid = f"{base}-{n}"
     
-    doc = Player(id=pid, name=name, position=(body.position or None), status=body.status or "Aktiv").dict()
-    doc["has_password"] = False
-    await db.players.insert_one(doc)
-    return doc
+    new_player = {
+        "id": pid,
+        "name": name,
+        "number": body.number,
+        "position": body.position,
+        "email": body.email,
+        "birthdate": body.birthdate,
+        "jersey_number": body.jersey_number,
+        "avatar_file_id": body.avatar_file_id,
+        "spieler_id": body.spieler_id,
+        "password_hash": None,
+    }
+    await db.players.insert_one(new_player)
+    new_player.pop("_id", None)
+    new_player["has_password"] = False
+    return new_player
 
-@router.patch("/players/{player_id}")
-async def update_player(player_id: str, body: PlayerUpdate, _coach: CoachPlayer):
-    upd = {}
-    if body.name is not None and body.name.strip():
-        upd["name"] = body.name.strip()
-    if body.position is not None:
-        upd["position"] = body.position.strip() or None
-    if not upd:
-        raise HTTPException(status_code=400, detail="Keine Daten")
-    res = await db.players.update_one({"id": player_id}, {"$set": upd})
-    if res.matched_count == 0:
+
+@router.patch("/players/{player_id}", response_model=Player)
+async def update_player(player_id: str, body: PlayerUpdate, current_player_id: CurrentPlayer):
+    p = await db.players.find_one({"id": player_id})
+    if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    return {"ok": True, "id": player_id, **upd}
+    
+    is_c = await _is_coach(current_player_id)
+    if current_player_id != player_id and not is_c:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+    
+    update_data = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    if update_data:
+        await db.players.update_one({"id": player_id}, {"$set": update_data})
+    
+    updated = await db.players.find_one({"id": player_id}, {"_id": 0})
+    updated["has_password"] = bool(updated.get("password_hash"))
+    updated.pop("password_hash", None)
+    return updated
 
 
 @router.delete("/players/{player_id}")
-async def delete_player(player_id: str, _coach: CoachPlayer):
+async def delete_player(player_id: str, current_player_id: CurrentPlayer):
+    is_c = await _is_coach(current_player_id)
+    if not is_c:
+        raise HTTPException(status_code=403, detail="Nur Trainer können Spieler löschen")
     res = await db.players.delete_one({"id": player_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    await db.attendance.delete_many({"player_id": player_id})
     return {"ok": True}
 
 
-@router.patch("/players/{player_id}/contact")
-async def update_player_contact(
-    player_id: str, body: ContactUpdate, current_player_id: CurrentPlayer
-):
-    # Only the owner or the Coach may edit contact details.
-    if current_player_id != player_id and not await _is_coach(current_player_id):
-        raise HTTPException(status_code=403, detail="Nicht erlaubt.")
-    upd = {}
-    if body.email is not None:
-        upd["email"] = body.email.strip() or None
-    if body.birthdate is not None:
-        upd["birthdate"] = body.birthdate.strip() or None
-    if body.jersey_number is not None:
-        new_jersey = body.jersey_number if body.jersey_number > 0 else None
-        # Uniqueness check: don't allow two players to share the same jersey.
-        # Only when a positive number is being assigned; clearing is fine.
-        if new_jersey is not None:
-            clash = await db.players.find_one(
-                {"jersey_number": new_jersey, "id": {"$ne": player_id}},
-                {"_id": 0, "id": 1, "name": 1},
-            )
-            if clash:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Trikotnummer {new_jersey} ist bereits an {clash.get('name')} vergeben.",
-                )
-        upd["jersey_number"] = new_jersey
-    if body.avatar_file_id is not None:
-        upd["avatar_file_id"] = body.avatar_file_id or None
-    if body.spieler_id is not None:
-        upd["spieler_id"] = body.spieler_id.strip() or None
-    if not upd:
-        raise HTTPException(status_code=400, detail="Keine Daten")
-    res = await db.players.update_one({"id": player_id}, {"$set": upd})
-    if res.matched_count == 0:
+@router.patch("/players/{player_id}/contact", response_model=Player)
+async def update_player_contact(player_id: str, body: ContactUpdate, current_player_id: CurrentPlayer):
+    p = await db.players.find_one({"id": player_id})
+    if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    return {"ok": True, "id": player_id, **upd}
+    is_c = await _is_coach(current_player_id)
+    if current_player_id != player_id and not is_c:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+    
+    await db.players.update_one(
+        {"id": player_id},
+        {"$set": {"email": body.email, "birthdate": body.birthdate, "spieler_id": body.spieler_id}}
+    )
+    updated = await db.players.find_one({"id": player_id}, {"_id": 0})
+    updated["has_password"] = bool(updated.get("password_hash"))
+    updated.pop("password_hash", None)
+    return updated
 
 
-@router.patch("/players/{player_id}/status")
-async def update_player_status(player_id: str, body: StatusUpdate, _coach: CoachPlayer):
-    if body.status not in ("Aktiv", "Verletzt", "Inaktiv"):
-        raise HTTPException(status_code=400, detail="Ungültiger Status")
-    res = await db.players.update_one({"id": player_id}, {"$set": {"status": body.status}})
-    if res.matched_count == 0:
+@router.patch("/players/{player_id}/status", response_model=Player)
+async def update_player_status(player_id: str, body: StatusUpdate, current_player_id: CurrentPlayer):
+    p = await db.players.find_one({"id": player_id})
+    if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    return {"ok": True, "id": player_id, "status": body.status}
+    is_c = await _is_coach(current_player_id)
+    if current_player_id != player_id and not is_c:
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+    
+    await db.players.update_one({"id": player_id}, {"$set": {"status": body.status}})
+    updated = await db.players.find_one({"id": player_id}, {"_id": 0})
+    updated["has_password"] = bool(updated.get("password_hash"))
+    updated.pop("password_hash", None)
+    return updated
 
 
 @router.post("/players/{player_id}/set-password", dependencies=[Depends(set_password_limit)])
@@ -185,51 +179,51 @@ async def set_password(player_id: str, body: PasswordBody):
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
     if len(body.password) < 4:
         raise HTTPException(status_code=400, detail="Passwort muss mind. 4 Zeichen haben")
+    
+    safe_password = body.password[:72]
+    
     await db.players.update_one(
-        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(body.password)}}
+        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(safe_password)}}
     )
     return {"access_token": create_token(player_id), "player_id": player_id}
+
 
 @router.post("/players/{player_id}/login", dependencies=[Depends(login_limit)])
 async def login(player_id: str, body: PasswordBody):
     p = await db.players.find_one({"id": player_id})
     if not p or not p.get("password_hash"):
-        # Same message regardless of cause to avoid user-enumeration side channel.
         raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
-    if not pwd_context.verify(body.password, p["password_hash"]):
+    
+    safe_password = body.password[:72]
+    
+    if not pwd_context.verify(safe_password, p["password_hash"]):
         raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
     return {"access_token": create_token(player_id), "player_id": player_id}
 
 
-@router.post(
-    "/players/{player_id}/forgot-password",
-    dependencies=[Depends(forgot_password_limit)],
-)
+@router.post("/players/{player_id}/forgot-password", dependencies=[Depends(forgot_password_limit)])
 async def forgot_password(player_id: str, background_tasks: BackgroundTasks):
     p = await db.players.find_one({"id": player_id})
     if not p:
         raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    email = (p.get("email") or "").strip()
+    email = p.get("email")
     if not email:
-        raise HTTPException(
-            status_code=400,
-            detail="Für dich ist keine E-Mail hinterlegt. Bitte kontaktiere den Coach.",
-        )
+        raise HTTPException(status_code=400, detail="Keine E-Mail-Adresse für diesen Spieler hinterlegt.")
+    
     code = f"{random.randint(0, 999999):06d}"
-    expires = datetime.now(timezone.utc) + timedelta(minutes=15)
+    code_hash = pwd_context.hash(code)
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+    
     await db.reset_codes.update_one(
         {"player_id": player_id},
-        {"$set": {"code_hash": pwd_context.hash(code), "expires_at": expires.isoformat(), "attempts": 0}},
+        {"$set": {"code_hash": code_hash, "expires_at": expires_at, "attempts": 0}},
         upsert=True,
     )
-    background_tasks.add_task(send_reset_code, email, code, p.get("name") or "")
-    return {"ok": True, "email_hint": _mask_email(email)}
+    background_tasks.add_task(send_reset_code, email, code)
+    return {"ok": True, "masked_email": _mask_email(email)}
 
 
-@router.post(
-    "/players/{player_id}/reset-password",
-    dependencies=[Depends(forgot_password_limit)],
-)
+@router.post("/players/{player_id}/reset-password", dependencies=[Depends(forgot_password_limit)])
 async def reset_password(player_id: str, body: ResetPasswordBody):
     if len(body.password) < 4:
         raise HTTPException(status_code=400, detail="Passwort muss mind. 4 Zeichen haben")
@@ -249,8 +243,11 @@ async def reset_password(player_id: str, body: ResetPasswordBody):
     if not pwd_context.verify(body.code.strip(), rec["code_hash"]):
         await db.reset_codes.update_one({"player_id": player_id}, {"$inc": {"attempts": 1}})
         raise HTTPException(status_code=401, detail="Falscher Code.")
+    
+    safe_password = body.password[:72]
+    
     await db.players.update_one(
-        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(body.password)}}
+        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(safe_password)}}
     )
     await db.reset_codes.delete_one({"player_id": player_id})
     return {"access_token": create_token(player_id), "player_id": player_id}
