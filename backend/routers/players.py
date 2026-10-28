@@ -99,8 +99,11 @@ async def create_player(body: PlayerCreate, _coach: CoachPlayer):
     while await db.players.find_one({"id": pid}):
         n += 1
         pid = f"{base}-{n}"
+    
     doc = Player(id=pid, name=name, position=(body.position or None), status=body.status or "Aktiv").dict()
+    doc["has_password"] = False
     await db.players.insert_one(doc)
+    return doc
     doc["has_password"] = False
     return doc
 
