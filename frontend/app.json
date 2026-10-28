@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Tus2 by Mimo",
-    "slug": "frontend",
+    "slug": "tus2-by-mimo",
+    "owner": "mimo20000",
     "version": "5.0.6",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.mobilefirststage.bnre6k",
+      "bundleIdentifier": "com.mimo20000.tus2bymimo",
       "buildNumber": "5.0.6",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Profilfoto aus deiner Galerie auswählen"
@@ -21,7 +22,7 @@
         "backgroundColor": "#C22520"
       },
       "versionCode": 506,
-      "package": "com.emergent.mobilefirststage.bnre6k"
+      "package": "com.mimo20000.tus2bymimo"
     },
     "web": {
       "bundler": "metro",
