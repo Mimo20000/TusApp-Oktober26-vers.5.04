@@ -1,0 +1,151 @@
+{
+  "app_name": "TuS Oberhausen Team App",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A structured, clean, and highly functional team management tool leaning into the traditional Red and White TuS Oberhausen club identity without feeling overwhelming.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#1A1A1A",
+    "surfaceSecondary": "#F5F5F5",
+    "onSurfaceSecondary": "#4A4A4A",
+    "surfaceTertiary": "#EBEBEB",
+    "onSurfaceTertiary": "#4A4A4A",
+    "surfaceInverse": "#1A1A1A",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#DA291C",
+    "brandPrimary": "#DA291C",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#FEECEB",
+    "onBrandSecondary": "#DA291C",
+    "brandTertiary": "#FDDFDC",
+    "onBrandTertiary": "#DA291C",
+    "success": "#34C759",
+    "onSuccess": "#FFFFFF",
+    "warning": "#FFCC00",
+    "onWarning": "#1A1A1A",
+    "error": "#FF3B30",
+    "onError": "#FFFFFF",
+    "info": "#1A1A1A",
+    "onInfo": "#FFFFFF",
+    "border": "#E5E5EA",
+    "borderStrong": "#C7C7CC",
+    "divider": "#E5E5EA"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Maintain generous iOS-native rhythms. Content should breathe with clear grouping. Safe areas strictly respected.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use glass on the bottom tab bar when content scrolls behind it.",
+      "Use glass on sticky screen headers over lists or schedules.",
+      "Use a frosted glass effect on hero cards overlaid on the handball match imagery."
+    ],
+    "dont's": [
+      "Never use glass on simple form fields or basic list rows.",
+      "Do not overdo glass on dense statistics or spreadsheet screens (use solid surfaceSecondary for legibility)."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login (Namensauswahl)",
+      "purpose": "A frictionless entry point where the user simply taps their name from the roster to log in.",
+      "states": {
+        "loading": "Centered spinner",
+        "empty": "No players found, please contact admin.",
+        "error": "Failed to load roster. Retry."
+      },
+      "layout": "Use a prominent TuS Oberhausen logo at the top over a hero background. Followed by a clean, vertically scrolling list of players. Large tap targets (min 56pt) for each name. No password required."
+    },
+    {
+      "name": "Termine (Home / Schedule)",
+      "purpose": "The core operational view displaying upcoming matches and training sessions.",
+      "states": {
+        "loading": "Skeleton cards representing events.",
+        "empty": "Illustration of a handball with text 'Keine anstehenden Termine' (No upcoming events).",
+        "error": "Could not load schedule. Retry."
+      },
+      "layout": "Feed of schedule cards. Each card must prominently display Date, Time, Opponent/Type, and two distinct action buttons: 'Zusagen' (Confirm - using brandPrimary or success) and 'Absagen' (Decline - using a muted tertiary style or error if strict). Sticky bottom CTA if there's a global action, but mostly inline actions."
+    },
+    {
+      "name": "Kader (Roster)",
+      "purpose": "A directory of the team, displaying players, their positions, and jersey numbers.",
+      "states": {
+        "loading": "List skeleton.",
+        "empty": "No players added yet.",
+        "error": "Error loading roster."
+      },
+      "layout": "iOS-style list with 56pt height rows. Left: large jersey number in a brandTertiary circle. Middle: Player name and position. Right: Chevron for details."
+    },
+    {
+      "name": "Statistik & Anwesenheit",
+      "purpose": "Visual overview of participation rates and a detailed spreadsheet grid for attendance.",
+      "states": {
+        "loading": "Skeleton table and charts.",
+        "empty": "Not enough data for statistics.",
+        "error": "Error loading statistics."
+      },
+      "layout": "Top section: High-level metric cards (e.g., overall attendance %). Bottom section: A horizontal and vertical scrolling matrix (Sheet/Tabelle) comparing players (Y-axis) against events (X-axis). Use alternating row colors (surface and surfaceSecondary) to ensure the grid is easy to read. First column (Names) must stick."
+    }
+  ],
+  "images": {
+    "login_hero_background": {
+      "url": "https://images.unsplash.com/photo-1725354282080-cf7e4b7325bc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxyZWQlMjBhYnN0cmFjdCUyMGdlb21ldHJpYyUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgzODU3Nzc5fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract red background matching club colors"
+    },
+    "empty_state_handball": {
+      "url": "https://images.unsplash.com/photo-1587384474964-3a06ce1ce699?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwxfHxoYW5kYmFsbCUyMG1hdGNofGVufDB8fHx8MTc4Mzg1Nzc3OXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Handball on a court"
+    },
+    "schedule_hero_photo": {
+      "url": "https://images.unsplash.com/photo-1513028738826-f000cded30a4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwyfHxoYW5kYmFsbCUyMG1hdGNofGVufDB8fHx8MTc4Mzg1Nzc3OXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Handball match action shot"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Adhere to the '1 iOS-Native Clean' personality. Use crisp borders, ample whitespace (lg/xl spacing), and clean Plus Jakarta Sans typography.",
+    "Implement the 'TuS Oberhausen' branding faithfully using the #DA291C red as the primary anchor. Ensure UI remains in German ('Zusagen', 'Absagen', 'Termine', 'Kader', 'Statistik').",
+    "For the Login screen, build a frictionless name selector list. No password fields are required, just tap the name.",
+    "The 'Anwesenheitsliste' (Sheet/Tabelle) requires a custom compound ScrollView (horizontal and vertical scrolling) to handle the Player vs. Event matrix.",
+    "Include the user's provided logo for TuS Oberhausen locally or as a prop, as they stated they will attach it. Fallback to an elegant text wordmark 'TuS OBERHAUSEN' if the image is missing.",
+    "Ensure 'Zusagen' (Confirm) and 'Absagen' (Decline) buttons are highly visible touch targets on the schedule cards, using clear color affordances without violating the brand guidelines."
+  ]
+}

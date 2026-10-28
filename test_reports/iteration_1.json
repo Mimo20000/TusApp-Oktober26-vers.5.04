@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the new Google Maps 'Route' pill feature on AWAY games in TuS Oberhausen II handball app, plus PWA manifest integration and full backend regression. Backend: 21/23 pytest passed (2 pre-existing auth tests fail because seeded players except josh-ankermann have no password set — data issue, not related to the feature). PWA: /manifest.json returns valid JSON with name='Tus2 by Mimo', start_url='/', display='standalone', 192+512 PNG icons; /icon-192.png (30KB) and /icon-512.png (148KB) are reachable (200 OK). Frontend Route pill: verified against a live login as josh-ankermann/pw12345 — all 3 AWAY games rendered in scroll range (T2, T3, T5) show testID 'maps-T*' pill; HOME games (T1, T4, T6) and all Training events show no maps-* pill; tapping the pill triggers window.open with URL https://www.google.com/maps/search/?api=1&query=<encoded location, opponent> (e.g. Herbolzheim%2FBreisgauhalle%2C%20SG%20Kenzingen%2FHerbolzheim%20III). Event Detail (/event/T2 away): testID 'maps-detail-T2' present and functional; Event Detail (/event/T1 home): 'maps-detail-T1' correctly absent. Note on +html.tsx: source contains <link rel='manifest'>, <meta theme-color='#171414'> and apple-touch-icon, but the base URL served by Expo in DEV mode uses the default Expo shell index.html and does NOT inline these tags — this is expected Expo Router behaviour (+html.tsx is only applied on `expo export -p web` static build). Manifest is still discoverable directly at /manifest.json. Cancelled events cannot be exercised because seed has 0 cancelled events, but code-level guard `!cancelled` is present in both EventCard.tsx and event/[id].tsx.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/players/filip-la/login", "issue": "Pre-existing test in test_tus_api.py assumes filip-la password='test123' but this fresh DB has has_password=false for filip-la; returns 404 'Kein Passwort gesetzt'. Not related to feature under test."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tus_api.py",
+    "/app/test_reports/pytest/tus_api.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Update pre-existing test_tus_api.py TestAuth.test_login_filip_known / test_login_wrong_password_401 to pick a player with has_password=true dynamically, or set filip-la password during seed. Unrelated to feature. Not blocking.",
+    "INFO: To have the manifest <link> present in served HTML for dev preview, run `expo export -p web` for production; in dev mode Expo serves its default shell so the +html.tsx additions only appear in the built output. Manifest itself is fetchable at /manifest.json and PWA install works via that + the service worker registration in +html.tsx (which does apply in production build).",
+    "INFO: Seed has 0 cancelled events, so the `!cancelled` guard on the Route pill was verified only by source inspection, not runtime. Consider adding one cancelled Spiel to seed for future regression."
+  ],
+  "critical_code_review_comments": [
+    "EventCard.tsx and event/[id].tsx duplicate the CLUB constant and openInMaps helper — could be extracted to /app/frontend/src/utils/maps.ts to avoid drift. Non-blocking DRY.",
+    "openInMaps uses Platform.OS === 'ios' → maps.apple.com; on web Platform.OS === 'web', so it correctly falls through to google.com/maps as required by the spec.",
+    "Both Route pills use hitSlop={8}; combined with padding the effective touch target is ~28h × ~48w — a touch smaller than the 44pt recommendation on the height axis but adequate with hitSlop. Acceptable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "91% (21/23; 2 unrelated pre-existing failures)", "frontend": "100% (14/14 feature assertions)"},
+  "seed_data_creation": "None. Used existing seeded events (T1..T12) and existing josh-ankermann account (pw12345).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Route pill feature (maps-{id} on Termine, maps-detail-{id} on event detail) is fully verified for AWAY games and correctly hidden for HOME/Training. Login as josh-ankermann / pw12345 to get past auth. Base URL: https://mobile-first-stage-71.preview.emergentagent.com. Cancelled-event branch not exercisable without added seed data.",
+  "rca_of_issue": "Not applicable — no issues found in the feature under test."
+}

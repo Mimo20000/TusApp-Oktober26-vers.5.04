@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only regression after Expo SDK 57->58 upgrade (mobile viewport 375x667, public URL). Everything works except the filter chips. App boots with no red screen, no pageerrors and no console errors, and the login screen shows 'Version 5.0.4'. Login works for josh-ankermann and sascha-grins, and a wrong password shows a German error. Termine: the feed renders and the 'Offene Bierkasse: 2,00 €' reminder banner shows. Zusagen works. Absagen opens the reason sheet: submit stays disabled while the reason is empty, Abbrechen and tapping the overlay both close it, and submitting saves the reason chip. Event detail /event/T2 opens and the back button works. Chat: team chat opens, keyboard typing works, the message sends and appears, and the input clears. Kader: 18 rows. Statistik: all 6 mode chips and both scope chips update the list. Anwesenheit: the grid renders and scrolls horizontally and vertically. Tabelle: 13 team chips, switching class reloads from handball4all (all 200), and the Tabelle/Spielplan toggle works. Kasse as sascha-grins: Offen 2,00 € / Bezahlt 0,00 € cards at top, 'Übersicht teilen' present, monthly rows have a green 'Abhaken' button (rgb 46,158,79), and the add-entry modal opens. Logout returns to login. REGRESSION FOUND: the shared Chips filter row (src/ui.tsx) collapses to 0px height whenever the list below is long. On Termine the Alle/Spiele/Trainings/Treffen filter is completely hidden and cannot be tapped. On Kader it is cut off by the header. Pull-to-refresh could NOT be verified on web (RefreshControl does nothing in react-native-web). Deprecated packages detected: none. No SafeAreaView-from-react-native usage.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Chips (src/ui.tsx:81-86, chipStyles.scroller line 107)", "issue": "The horizontal ScrollView has only style {maxHeight:56} and the default flexShrink:1. In the flex column (Header -> Chips -> ScrollView list) it shrinks to 0px height when the list content is long. The chips draw outside it (top 68px) and are covered by the header and the list banner. elementFromPoint on chip-Spiel returns the 'Offene Bierkasse' banner, and a normal Playwright click times out (intercepted). Termine event-type filter is unusable. Kader status filter is half hidden under the header, but becomes visible once the list is short (e.g. after choosing Verletzt). Likely caused by the upgrade (react-native-web 0.21 / RN 0.88 flex defaults). Statistik chips are fine because they sit inside a ScrollView. Liga team chips are fine because they are wrapped in a View.", "testID": "chip-alle, chip-Spiel, chip-Training, chip-Treffen (termine); chip-alle/Aktiv/Verletzt/Inaktiv (kader)", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tab bar", "issues": ["With 6–7 tabs the 'Anwesenheit' label is cut off ('Anwesen…' / 'Anwes…') at 375px width."]},
+      {"screen": "Anwesenheit tab (tabelle.tsx)", "issues": ["The screen header says 'Tabelle' while the tab is called 'Anwesenheit'. The Liga tab is also titled 'Tabelle', so two screens share the same title."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [".screenshots/termine.png", ".screenshots/absage_sheet.png", ".screenshots/chat.png", ".screenshots/kader.png", ".screenshots/kasse.png", ".screenshots/liga_spielplan.png"],
+  "action_items": [
+    "HIGH: In /app/frontend/src/ui.tsx change chipStyles.scroller to { maxHeight: 56, flexGrow: 0, flexShrink: 0 } (or wrap the Chips ScrollView in a View, as liga.tsx chipsWrap does). Then check that chip-Spiel on Termine and chip-alle on Kader are visible and tappable while the lists are long.",
+    "LOW: Shorten the 'Anwesenheit' tab label or allow it to wrap. Rename the header of tabelle.tsx to 'Anwesenheit' to match the tab.",
+    "INFO: Pull-to-refresh on Tabelle/Termine/Statistik can only be checked on a device or in Expo Go (RefreshControl does nothing on web)."
+  ],
+  "critical_code_review_comments": [
+    "Termine renders every event card inside a plain ScrollView (about 280 zusagen-* buttons in the DOM). Consider FlatList/FlashList to keep scrolling fast on native under the new architecture.",
+    "No babel.config.js is present. This is fine because babel-preset-expo in SDK 58 adds the react-native-worklets plugin automatically.",
+    "expo.out.log contains old TransformError/UnableToResolve entries from during the upgrade. The latest Metro start bundled 1509 modules cleanly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "~92% (all 10 requested flows pass except the Termine filter chips, which are hidden; pull-to-refresh cannot be tested on web)"},
+  "seed_data_creation": "Sent the team chat message 'TEST_SDK58 Regression Nachricht' as josh-ankermann. Josh's RSVP for event T2 was set to abgesagt (reason 'TEST_Regression SDK58'), then restored to zugesagt.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login: tap login-player-<id>, fill login-password, tap login-submit. Tabs are role=tab with names Termine/Chat/Kader/Statistik/Anwesenheit/Tabelle/Kasse (Kasse only for sascha-grins). Event T2 is the first upcoming game. Chips testIDs are chip-<key>. To check the chip fix, use elementFromPoint or a click without force=True.",
+  "rca_of_issue": "Chips scroller collapse: in src/ui.tsx a horizontal ScrollView sits directly in a flex column with no flexGrow/flexShrink set. react-native-web gives ScrollView flexShrink:1, so when the sibling list (flex:1) has a lot of content, the scroller shrinks to 0px. Its children overflow visibly and are painted over by the Header and the list. Fix: set flexShrink:0 and flexGrow:0 on the scroller, or wrap it in a fixed-height View."
+}

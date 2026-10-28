@@ -1,0 +1,294 @@
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from auth import CurrentPlayer
+from db import db
+from models import BeerBody, DrivingBody, RSVP
+from push import direct_conv_id, notify_new_message
+
+router = APIRouter()
+
+
+def _fmt_date(d: str) -> str:
+    parts = (d or "").split("-")
+    if len(parts) == 3:
+        return f"{parts[2]}.{parts[1]}.{parts[0]}"
+    return d
+
+
+async def _announce_team(player: dict, text: str):
+    """Posts an informational team-chat message on behalf of the player."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    msg = {
+        "id": "MSG" + uuid.uuid4().hex[:10],
+        "conversation_id": "team",
+        "scope": "team",
+        "sender_id": player["id"],
+        "sender_name": player["name"],
+        "text": text,
+        "created_at": now_iso,
+    }
+    await db.messages.insert_one(dict(msg))
+    # sender has "read" their own announcement
+    await db.reads.update_one(
+        {"player_id": player["id"], "conversation_id": "team"},
+        {"$set": {"last_read": now_iso}},
+        upsert=True,
+    )
+    await notify_new_message("team", "team", player["id"], player["name"], text)
+
+
+async def _dm_coach_absage(player: dict, event: dict, reason: str) -> None:
+    """When a player cancels an event, ping every Coach with a direct message.
+
+    Skips when the sender is the Coach themselves (no self-ping). Idempotent
+    by (event, player) — replaces the previous auto-ping in the same 1:1
+    conversation so the coach's inbox doesn't spam on quick re-edits.
+    """
+    coaches = await db.players.find(
+        {"position": "Coach", "id": {"$ne": player["id"]}}, {"_id": 0}
+    ).to_list(50)
+    if not coaches:
+        return
+    kind = event.get("type") or "Termin"
+    opp = event.get("opponent")
+    title = f"Spiel gegen {opp}" if kind == "Spiel" and opp else kind
+    date_de = _fmt_date(event.get("date") or "")
+    time_s = event.get("time") or ""
+    when = f"{date_de} um {time_s} Uhr" if time_s else date_de
+    text = f"❌ {player.get('name')} hat abgesagt: {title} am {when}\nGrund: {reason}"
+    for coach in coaches:
+        cid = direct_conv_id(player["id"], coach["id"])
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # Update-or-insert the auto-ping message so repeated absage edits by
+        # the same player for the same event don't spam the coach's chat.
+        marker_id = f"absage:{event['id']}:{player['id']}:{coach['id']}"
+        await db.messages.update_one(
+            {"id": marker_id},
+            {
+                "$set": {
+                    "id": marker_id,
+                    "conversation_id": cid,
+                    "scope": "direct",
+                    "sender_id": player["id"],
+                    "sender_name": player["name"],
+                    "text": text,
+                    "created_at": now_iso,
+                }
+            },
+            upsert=True,
+        )
+        await notify_new_message(
+            "direct", cid, player["id"], player.get("name") or "", text
+        )
+
+
+@router.get("/attendance")
+async def get_attendance(_current: CurrentPlayer):
+    docs = await db.attendance.find({}, {"_id": 0}).to_list(5000)
+    return docs
+
+
+async def _is_coach(player_id: str) -> bool:
+    p = await db.players.find_one({"id": player_id}, {"_id": 0, "position": 1})
+    return bool(p and (p.get("position") or "").lower() == "coach")
+
+
+@router.post("/rsvp")
+async def set_rsvp(rsvp: RSVP, current_player_id: CurrentPlayer):
+    # Regular players may only edit their own RSVP. The Coach may set the
+    # attendance for any player (e.g. entering it on paper at practice).
+    if rsvp.player_id != current_player_id:
+        if not await _is_coach(current_player_id):
+            rsvp.player_id = current_player_id
+    if rsvp.status not in ("zugesagt", "abgesagt"):
+        raise HTTPException(status_code=400, detail="Ungültiger Status")
+    reason = (rsvp.reason or "").strip()
+    if rsvp.status == "abgesagt" and not reason:
+        raise HTTPException(status_code=400, detail="Bitte gib einen Grund für die Absage an.")
+
+    prev = await db.attendance.find_one({"event_id": rsvp.event_id, "player_id": rsvp.player_id})
+
+    upd = {"status": rsvp.status, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if rsvp.status == "abgesagt":
+        upd["reason"] = reason
+    else:
+        upd["reason"] = None
+    await db.attendance.update_one(
+        {"event_id": rsvp.event_id, "player_id": rsvp.player_id},
+        {"$set": upd},
+        upsert=True,
+    )
+
+    # Auto-DM the coach whenever a player absagt (fresh or reason changed).
+    # Skip when nothing user-visible changed to avoid duplicate pings.
+    if rsvp.status == "abgesagt":
+        prev_status = (prev or {}).get("status")
+        prev_reason = (prev or {}).get("reason") or ""
+        if prev_status != "abgesagt" or prev_reason != reason:
+            player = await db.players.find_one({"id": rsvp.player_id})
+            event = await db.events.find_one({"id": rsvp.event_id})
+            if player and event:
+                await _dm_coach_absage(player, event, reason)
+
+    return {
+        "ok": True,
+        "event_id": rsvp.event_id,
+        "player_id": rsvp.player_id,
+        "status": rsvp.status,
+        "reason": upd.get("reason"),
+    }
+
+
+class RSVPReset(BaseModel):
+    event_id: str
+    player_id: str
+
+
+@router.post("/rsvp/reset")
+async def reset_rsvp(body: RSVPReset, current_player_id: CurrentPlayer):
+    """Clear a player's RSVP so the event shows them under 'Offen' again.
+
+    Regular players may only reset their own; the Coach can clear anyone's
+    (useful when a wrong tap needs to be undone in the roster view).
+    """
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
+        body.player_id = current_player_id
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {"$set": {"status": None, "reason": None}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+class CoachAttendance(BaseModel):
+    event_id: str
+    player_id: str
+    status: Optional[str] = None  # "zugesagt" | "abgesagt" | None (=offen)
+    reason: Optional[str] = None  # optional absence reason (only kept for abgesagt)
+
+
+@router.post("/attendance/coach-set")
+async def coach_set_attendance(body: CoachAttendance, current_player_id: CurrentPlayer):
+    """Coach-only retroactive attendance editing.
+
+    Lets the Coach fix who was present/absent for a PAST event — e.g. when a
+    player forgot to RSVP, or a wrong Zusage/Absage needs correcting. Unlike
+    the normal ``/rsvp`` flow this has NO side effects: no coach-DM, no team
+    chat announcement, and no mandatory reason. ``status=None`` clears it back
+    to "offen".
+    """
+    if not await _is_coach(current_player_id):
+        raise HTTPException(status_code=403, detail="Nur der Coach darf die Anwesenheit nachtragen.")
+    if body.status not in (None, "zugesagt", "abgesagt"):
+        raise HTTPException(status_code=400, detail="Ungültiger Status")
+    event = await db.events.find_one({"id": body.event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(status_code=404, detail="Termin nicht gefunden")
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    if (event.get("date") or "") > today_iso:
+        raise HTTPException(
+            status_code=400,
+            detail="Nur vergangene Termine können nachträglich gesetzt werden.",
+        )
+    reason = (body.reason or "").strip() if body.status == "abgesagt" else None
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {
+            "$set": {
+                "status": body.status,
+                "reason": reason,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "by_coach": body.status is not None,
+            }
+        },
+        upsert=True,
+    )
+    return {
+        "ok": True,
+        "event_id": body.event_id,
+        "player_id": body.player_id,
+        "status": body.status,
+        "reason": reason,
+    }
+
+
+@router.post("/driving")
+async def set_driving(body: DrivingBody, current_player_id: CurrentPlayer):
+    # Coach may set another player's driving flag; everyone else only their own.
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
+        body.player_id = current_player_id
+    prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
+    was = bool(prev.get("driving")) if prev else False
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {"$set": {"driving": body.driving}},
+        upsert=True,
+    )
+    # Announce to team only when newly turning ON.
+    if body.driving and not was:
+        player = await db.players.find_one({"id": body.player_id})
+        event = await db.events.find_one({"id": body.event_id})
+        if player and event:
+            first = (player.get("name") or "").split()[0] or player.get("name")
+            opp = event.get("opponent")
+            gegner = f" gegen {opp}" if opp else ""
+            text = f"🚗 {first} fährt zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            await _announce_team(player, text)
+    # Announce when turning OFF (was driving, now not).
+    elif was and not body.driving:
+        player = await db.players.find_one({"id": body.player_id})
+        event = await db.events.find_one({"id": body.event_id})
+        if player and event:
+            first = (player.get("name") or "").split()[0] or player.get("name")
+            opp = event.get("opponent")
+            gegner = f" gegen {opp}" if opp else ""
+            text = f"🚗❌ {first} fährt doch nicht zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            await _announce_team(player, text)
+    return {"ok": True}
+
+
+@router.post("/beer")
+async def set_beer(body: BeerBody, current_player_id: CurrentPlayer):
+    # Coach may set another player's beer flag; everyone else only their own.
+    if body.player_id != current_player_id and not await _is_coach(current_player_id):
+        body.player_id = current_player_id
+    prev = await db.attendance.find_one({"event_id": body.event_id, "player_id": body.player_id})
+    was = bool(prev.get("beer")) if prev else False
+    await db.attendance.update_one(
+        {"event_id": body.event_id, "player_id": body.player_id},
+        {"$set": {"beer": body.beer}},
+        upsert=True,
+    )
+    # Announce to team only when newly turning ON.
+    if body.beer and not was:
+        player = await db.players.find_one({"id": body.player_id})
+        event = await db.events.find_one({"id": body.event_id})
+        if player and event:
+            first = (player.get("name") or "").split()[0] or player.get("name")
+            if event.get("type") == "Spiel":
+                opp = event.get("opponent")
+                gegner = f" gegen {opp}" if opp else ""
+                text = f"🍺 {first} bringt Bier zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            else:
+                text = f"🍺 {first} bringt Bier zum Training am {_fmt_date(event.get('date'))}."
+            await _announce_team(player, text)
+    # Announce when turning OFF (was bringing beer, now not).
+    elif was and not body.beer:
+        player = await db.players.find_one({"id": body.player_id})
+        event = await db.events.find_one({"id": body.event_id})
+        if player and event:
+            first = (player.get("name") or "").split()[0] or player.get("name")
+            if event.get("type") == "Spiel":
+                opp = event.get("opponent")
+                gegner = f" gegen {opp}" if opp else ""
+                text = f"🍺❌ {first} bringt doch kein Bier zum Spiel{gegner} am {_fmt_date(event.get('date'))}."
+            else:
+                text = f"🍺❌ {first} bringt doch kein Bier zum Training am {_fmt_date(event.get('date'))}."
+            await _announce_team(player, text)
+    return {"ok": True}

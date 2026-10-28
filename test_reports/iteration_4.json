@@ -1,0 +1,48 @@
+{
+  "summary": "Bug fix verified end-to-end: adding avatar_file_id to the Player Pydantic response_model in backend/models.py fixes the roster photo preview. Backend pytest (6/6 PASS): GET /api/players now returns avatar_file_id on every player (null when unset, file_id string when set); the full upload chain POST /api/files/init -> /chunk -> /finalize -> PATCH /api/players/josh-ankermann/contact {avatar_file_id} persists the file_id, and the subsequent GET /api/players reflects it; /api/files/{id}/raw returns the correct image bytes; josh-ankermann password login regression PASS. Frontend playwright (mobile viewport 375x812) confirms: after uploading a photo via the backend chain, the Kader row testID=kader-row-josh-ankermann renders exactly one <img> whose src = https://.../api/files/F9a6b20d4112e40/raw (the /api/files/ prefix requirement is met), the position-letter fallback text 'RM/RA' is not rendered inside the avatar circle when a photo is set, and after page.reload() the same <img> re-appears with the identical src, proving the value round-trips through the DB and the newly-fixed Pydantic response_model. Screenshot shows the red uploaded PNG rendered in the round avatar slot for Josh. No regressions in login flow or Kader navigation.",
+  "acceptance_results": {
+    "get_players_returns_avatar_file_id_key": "PASS - every player object now contains avatar_file_id key (None or non-empty string)",
+    "backend_upload_chain_persists_avatar_file_id": "PASS - init/chunk/finalize returns file_id, PATCH /players/{id}/contact stores it, next GET /players returns it on josh-ankermann",
+    "kader_row_renders_img_with_api_files_src": "PASS - <img src='.../api/files/F9a6b20d4112e40/raw'> found inside [data-testid=kader-row-josh-ankermann]",
+    "position_letters_fallback_hidden_when_photo_set": "PASS - Josh row inner text no longer shows 'RM' inside avatar (only name/position label/status)",
+    "photo_persists_after_reload": "PASS - after page.reload the same <img> with identical /api/files/... src is present",
+    "login_regression": "PASS - POST /api/players/josh-ankermann/login with pw12345 returns 200 with access_token"
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console warning (pre-existing, carry-over)", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Present since iteration_2, not introduced by this fix."},
+      {"component": "console warning (pre-existing, carry-over)", "issue": "props.pointerEvents is deprecated. Use style.pointerEvents. Not introduced by this fix."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_4.json",
+    "/app/backend/tests/test_avatar_flow.py",
+    "/app/test_reports/pytest/avatar_flow.xml"
+  ],
+  "action_items": [
+    "None blocking. Bug is fully fixed and verified end-to-end.",
+    "Optional (carry-over from iteration_2/3): migrate remaining `shadow*` style props to `boxShadow` and `props.pointerEvents` to `style.pointerEvents` in RN styles/components."
+  ],
+  "critical_code_review_comments": [
+    "backend/models.py Player: correctly adds `avatar_file_id: Optional[str] = None` so the FastAPI response_model no longer strips the field from GET /api/players.",
+    "backend/routers/players.py update_player_contact already handled avatar_file_id in the ContactUpdate body and set it via $set - so persistence was already correct; the only missing piece was surfacing it on the response, which this fix addresses.",
+    "frontend/app/(tabs)/kader.tsx lines 130-146 correctly branch on p.avatar_file_id: expo-image <Image source={{uri: api.fileRawUrl(...)}}> when set, position letters fallback when null. This is the intended behaviour verified in the UI test.",
+    "PlayerEditSheet.tsx save() always sends avatar_file_id (empty string when cleared), which combined with the backend's `body.avatar_file_id or None` normalization correctly clears the avatar on removal.",
+    "expo-image is used with transition={150} and contentFit='cover' - good for the 46x46 rounded avatar."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_avatar_flow.py (new pytest file: 6 tests covering Player model shape, upload+PATCH persistence, /files/{id}/raw response, and login regression)"
+  ],
+  "success_rate": {
+    "backend": "6/6 = 100% (test_avatar_flow.py)",
+    "frontend": "6/6 acceptance items PASS (photo <img> in Kader row + reload persistence + /api/files/ src + fallback hidden + login regression)"
+  },
+  "seed_data_creation": "Uploaded one 1x1 red PNG (image/png, 67 bytes) via the /api/files chain and attached it as josh-ankermann's avatar_file_id. This persists in the players collection and files collection until the main agent/admin clears it. filename prefix 'TEST_avatar.png' for cleanup identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The josh-ankermann account now has a persistent test avatar (1x1 red PNG) attached from this iteration - the Kader tab will show a small red circle for Josh's row instead of position letters. To clear: PATCH /api/players/josh-ankermann/contact with {\"avatar_file_id\": \"\"} (backend normalizes empty string to None). Backend base URL: https://mobile-first-stage-71.preview.emergentagent.com. Reusable pytest file: /app/backend/tests/test_avatar_flow.py (module-scoped api_client, class-scoped uploaded_file_id fixture). Josh's password is still pw12345."
+}

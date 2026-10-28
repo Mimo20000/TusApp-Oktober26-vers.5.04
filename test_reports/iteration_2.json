@@ -1,0 +1,47 @@
+{
+  "summary": "PWA v2.0 upgrade + data-preservation review (frontend only). Verified manifest.json, sw.js, version badge, app/package versions, session persistence and Route-button regression via curl + Playwright against the public preview URL. 7/8 acceptance items PASS. One caveat: the inline SW-registration + <link rel=manifest> from app/+html.tsx are NOT present in the HTML shell served by the current preview URL because Expo runs in dev mode (script tag shows dev=true) and +html.tsx is only applied by `expo export`. sw.js and manifest.json are still served correctly and would be picked up in a production build. All 8 tested items summarized below.",
+  "acceptance_results": {
+    "manifest_content": "PASS — /manifest.json returns id='Mimos App', name='Tus2 by Mimo 2.0', short_name='Mimo', start_url='/', scope='/', display='standalone', theme_color='#171414', background_color='#a62020', icons: 192 any, 512 any, 512 maskable.",
+    "sw_version_and_cache": "PASS — /sw.js contains SW_VERSION=\"2.0.0\" and CACHE=`tus2-mimo-${SW_VERSION}` (i.e. tus2-mimo-2.0.0).",
+    "sw_lifecycle": "PASS — sw.js contains self.skipWaiting() in install, caches.keys() + filter + caches.delete() + self.clients.claim() in activate, and a message-handler for type==='SKIP_WAITING'.",
+    "html_shell_registration_script": "FAIL (dev-mode caveat) — curl of base URL returns Expo's default dev shell (36 lines, script src ...?dev=true). It contains no <link rel=manifest>, no navigator.serviceWorker.register('/sw.js'), no controllerchange listener, no SKIP_WAITING postMessage. In-browser navigator.serviceWorker.getRegistrations() returns []. The correct code IS present in /app/frontend/app/+html.tsx (lines 17, 55-84) — it just isn't applied in dev. This will work in a production `expo export` build but is NOT live on the current preview URL. See action_items.",
+    "version_badge": "PASS — locator text='Version 2.0' has count===1 on login screen.",
+    "app_and_package_version": "PASS — /app/frontend/app.json expo.version='2.0.0' and /app/frontend/package.json version='2.0.0'.",
+    "session_persistence": "PASS — Logged in as josh-ankermann / pw12345, redirected to /termine, localStorage populated with keys tus.token (JWT), tus.currentPlayerId='josh-ankermann', tus.currentPlayer. After page.reload() the app auto-redirected straight to /termine without re-prompting for password — session token survived.",
+    "route_button_regression": "PASS — 6 elements matching [data-testid^=maps-] are present on the Termine tab (away-game Route buttons still visible)."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "PWA auto-update (service-worker registration on public preview URL)",
+        "issue": "The registration script and <link rel=\"manifest\"> that live in app/+html.tsx are not present in the served HTML on the preview URL because Expo is running in dev mode. Browser reports 0 service-worker registrations. sw.js and manifest.json ARE served, so this will start working once the app is built via `expo export` for production, but on the current preview environment users will not actually receive the auto-update behavior described in the PRD. Recommend either (a) verifying only on a production/export build, or (b) starting Expo web with a production output so +html.tsx is applied.",
+        "affected_testIDs": []
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console warning", "issue": "'shadow*' style props are deprecated. Use 'boxShadow' — legacy shadow props are still used somewhere in the styles. Not blocking but should be migrated. Reference: emitted at runtime on every screen."},
+      {"component": "console warning", "issue": "props.pointerEvents is deprecated. Use style.pointerEvents — legacy prop still passed to a component (likely in Login or Termine screens)."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_2.json"],
+  "action_items": [
+    "For a real end-to-end verification of the PWA auto-update mechanism, run against an `expo export` production build (or configure the preview to serve the export output). The current dev preview does not render +html.tsx so the SW is never registered even though sw.js/manifest.json themselves are correct.",
+    "Optional cleanup: migrate remaining `shadow*` style props to `boxShadow` and `props.pointerEvents` to `style.pointerEvents` to silence RN 0.81 deprecation warnings."
+  ],
+  "critical_code_review_comments": [
+    "sw.js correctly excludes /api/ from caching and uses network-first for navigations + cache-first for static assets — good balance for auto-update.",
+    "+html.tsx registration script posts SKIP_WAITING on new worker install and reloads exactly once on controllerchange — correct and idempotent (reloaded flag).",
+    "manifest 'id' kept as 'Mimos App' (unchanged from v1) — correct: preserves PWA install identity so existing installations receive the update without re-install.",
+    "Session persistence relies on localStorage keys tus.token/tus.currentPlayerId/tus.currentPlayer — confirmed intact across reloads."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "87.5% (7/8 acceptance items on the preview URL; the one failure is a dev-mode limitation, not a code defect)"},
+  "seed_data_creation": "None. Reused existing player josh-ankermann with password pw12345 as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "PWA files (/manifest.json, /sw.js) are served correctly with 2.0.0 metadata. Version 2.0 pill renders on login. Login+reload persistence works. The +html.tsx-based SW registration is NOT active on the dev preview — only after production build. Josh ANKERMANN account still has password pw12345.",
+  "rca_of_issue": "Missing SW registration on the preview URL is because Expo's dev server does not apply app/+html.tsx to the served HTML shell (the shell shipped is the built-in dev shell with a single script src containing dev=true). Mitigation: build with `expo export` (or `npx expo export -p web`) and serve the /dist output; alternatively add the <link rel=manifest> and SW-registration script via a mechanism that runs in dev mode (e.g. inject through Metro/HTML template or web/index.html override) if the team wants the preview URL to be install-testable as a PWA."
+}

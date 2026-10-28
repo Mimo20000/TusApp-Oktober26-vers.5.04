@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 11 (SpielerID / SL-ID feature) — Backend 11/11 pytest pass, Frontend Josh + Coach flows both verified end-to-end. Version 3.0 pill count on login = 1. Termine card regression chips (Zusagen/Absagen/Bringe Bier/Kasse/Ich fahre) all still render. Absage reason modal still opens with the 'Grund für die Absage' prompt. No blocking bugs. NOTE: review request stated Coach michael-moser password = 'test1234' with email 'mm@test.de'; the actual working password is 'pw12345' (test1234 returned 401 in UI). Test credentials memo updated. All test data cleaned up (josh & filip spieler_id both back to null).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_spieler_id.py",
+    "/app/test_reports/pytest/iter11.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: add explicit permission gating on PATCH /api/players/{id}/contact — currently any client can update anyone's spieler_id (same known gap as email/birthdate). Flagged in review request as ACCEPTED state; no fix required this iteration.",
+    "OPTIONAL: attach testID to each tab bar item (e.g. testID='tab-kader') so future Playwright runs can select tabs without href fallback."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/players.py:update_player_contact — spieler_id branch mirrors the other fields (trim + '' → None) and is guarded by the same 'not upd → 400' contract. Partial update semantics correct.",
+    "backend/models.py:Player — spieler_id: Optional[str] = None default lets legacy DB docs without the field deserialize cleanly (verified with GET /api/players against seeded data).",
+    "frontend/src/PlayerEditSheet.tsx:117-152 — save() always sends every contact field on every save. Sending '' for un-touched fields relies on backend '' → None. For jersey it correctly translates blank to jerseyNum=0 → backend treats <=0 as null. Not a bug but worth documenting that opening + saving the sheet is effectively 'set all contact fields to what the form currently shows'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter11_spieler_id.py (new — 11 tests)",
+    "/app/memory/test_credentials.md (corrected Coach password to 'pw12345', email 'mm@test.de')"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (all requested flows)"},
+  "seed_data_creation": "No new seed data. Temporarily set josh-ankermann.spieler_id='SL-12345678' and filip-la.spieler_id='SL-9999' during the flows; both cleaned back to null via PATCH /contact {spieler_id:''}. Verified via GET /api/players after cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Coach password is 'pw12345' (NOT 'test1234' as older memos suggested). PlayerEditSheet exposes testID='input-spieler-id' (below testID='input-jersey'). Row tap testID pattern is 'kader-row-{playerId}'. When tapping Kader tab from Playwright, use a[href*='/kader'] — no testID on tab bar items yet. GET /api/players via Python urllib may hit a 403 through the preview ingress (UA-based); prefer curl or the `requests` package. Backend permission for /contact endpoint is intentionally ungated (accepted per review request).",
+  "rca_of_issue": "N/A — feature verification only, no bugs found."
+}

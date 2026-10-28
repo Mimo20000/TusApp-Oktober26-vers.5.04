@@ -1,0 +1,39 @@
+{
+  "summary": "Chat keyboard-inset fix verified against public preview URL (frontend only). Logged in as josh-ankermann / pw12345, opened Team-Chat, and simulated the mobile-browser soft keyboard by patching window.visualViewport.height to 420 and dispatching 'resize'. The useWebKeyboardInset hook fires and the input bar's paddingBottom expands so the actual interactive elements (chat-input, chat-send) shift upward by exactly innerH-vvH (= 424px in the 844→420 simulation) and remain fully within the visible viewport. All chat regressions PASS. One item could not be re-verified: 'Route button on away games' — the current Termine data contained no away games with maps-{id} testIDs at test time (0 elements) so the button was not present to click; this is a data condition, not a code defect. Console still emits pre-existing shadow*/pointerEvents RN 0.81 deprecation warnings.",
+  "acceptance_results": {
+    "keyboard_inset_lifts_input": "PASS — with visualViewport shrunk to 420px, chat-input bounding box moved from y=782 (bottom 836) to y=358 (bottom 412); chat-send bottom moved from 836 to 412. Both remain inside the visible viewport (0..420). Delta = 424px = innerH(844) − vvH(420) − offsetTop(0), which matches the hook's `Math.max(0, innerHeight - vv.height - vv.offsetTop)` formula plus spacing.sm padding on the container.",
+    "input_bar_container_covers_kb_area": "PASS — outer testID='chat-input-bar' expands its paddingBottom to fill the space the browser gave back so the visible interactive row sits directly above the simulated keyboard edge (bar box y=349, height=495, bottom=844; children rendered near top of that box due to paddingBottom=webKbInset+spacing.sm).",
+    "typing_and_send": "PASS — typed 'TEST_kbfix_<ts>' into chat-input, pressed chat-send, new bubble with the same text appeared in the conversation shortly after (verified in body innerText). POST /api/messages implicitly succeeded (no error, bubble rendered).",
+    "attach_row_toggle": "PASS — attach row hidden by default (attach-image count=0). Tapping chat-attach shows attach-image + attach-document (both count=1). Attach row Y (726) < input-bar Y (773) confirming it sits directly above the input bar and does not overlap. Second tap on chat-attach hides the row again (count back to 0).",
+    "desktop_web_no_keyboard": "PASS — with visualViewport=innerHeight (no keyboard), chat-input-bar bottom = 844 = window.innerHeight; input bar sits at the very bottom of the viewport with safe-area+spacing.sm padding (webKbInset=0 branch active).",
+    "route_button_regression_on_termine": "NOT VERIFIABLE IN CURRENT DATA — 0 elements matching [data-testid^='maps-'] found on the Termine tab at test time (iteration_2 saw 6, but the current listing has no away games with venue address to render the Route button). The button component in /app/frontend/src/components/EventCard.tsx (line 95) and /app/frontend/app/event/[id].tsx (line 120) is unchanged, so no code regression is present; this is just an absence of qualifying events in the current data snapshot."
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "console warning (pre-existing)", "issue": "'shadow*' style props are deprecated. Use 'boxShadow'. Emitted on chat and other screens. Not introduced by this change; already flagged in iteration_2."},
+      {"component": "console warning (pre-existing)", "issue": "props.pointerEvents is deprecated. Use style.pointerEvents. Emitted on login/termine transitions. Not introduced by this change; already flagged in iteration_2."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_3.json"],
+  "action_items": [
+    "None blocking. Optionally seed at least one upcoming away event with a venue address so the 'Route' button regression on Termine can be re-verified automatically in future testing iterations.",
+    "Optional cleanup (carry-over from iteration_2): migrate remaining `shadow*` style props to `boxShadow` and `props.pointerEvents` to `style.pointerEvents` in styles/components."
+  ],
+  "critical_code_review_comments": [
+    "useWebKeyboardInset: correctly gates on Platform.OS === 'web', reads visualViewport, and uses Math.max(0, innerH - vv.height - vv.offsetTop) so it stays at 0 when no keyboard is up — desktop web branch verified live.",
+    "Both 'resize' and 'scroll' listeners on visualViewport are subscribed and cleaned up in the effect return — no leak.",
+    "Applying the inset as paddingBottom on the input bar (rather than transform: translateY) means the container grows and pushes the FlatList content region up, so the last message stays visible; the useEffect on webKbInset also calls scrollToEnd — good UX detail.",
+    "keyboardVerticalOffset={insets.top + 44} matches the header total height (insets.top + spacing.sm + header content) — reasonable for native iOS/Android where KeyboardAvoidingView handles the shift.",
+    "behavior='translate-with-padding' is the correct react-native-keyboard-controller value for Android and other non-iOS platforms; iOS uses classic 'padding'."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped by request)", "frontend": "5/5 verifiable acceptance items PASS (1 item — Route button — not verifiable in current data snapshot; no code regression)"},
+  "seed_data_creation": "None. Sent one test chat message 'TEST_kbfix_<timestamp>' into the Team conversation as part of the send-regression check.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To re-simulate the mobile-browser soft keyboard on Playwright without a real device: patch window.visualViewport.height and offsetTop with Object.defineProperty (configurable:true) and dispatch a 'resize' event on visualViewport — the useWebKeyboardInset hook picks it up immediately (verified working on this preview). The interactive chat-input and chat-send land at y≈358/y≈368 with bottoms ≤ 420 when vvH=420. Josh ANKERMANN account still uses password pw12345."
+}

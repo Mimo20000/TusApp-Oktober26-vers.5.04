@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 14 validates the four requested changes: (1) /api/stats correctly excludes FUTURE events from every per-player and top-level count (games_count/trainings_count match the ground-truth of past-only events for both scope=all and scope=season). (2) Every player carries a numeric non-negative `streak` field; Josh's streak surfaces on UI as '2× in Folge zugesagt', all other players correctly show 'Noch keine Serie'. (3) past_rate/past_confirmed/past_total are computed over explicit yes/no answers only (past_total <= overall_total for every player; formula 100*confirmed/total verified). (4) beer_count and driving_count are bounded by past-only events. Response envelope includes `scope`, `games_count`, `trainings_count`. Scope toggle: /api/stats?scope=season correctly narrows to current calendar year (2026). Auth is enforced (401 without token). Payments: /api/payments now returns `monthly_open` — verified structure (month YYYY-MM, month_label with German month name e.g. 'August 2026'/'September 2026', total, count), sorted by month descending, completed payments excluded (per-month totals reconstruct exactly from open payments in `payments` array). Sascha (Bierwart) can read /payments; Josh gets 403. Frontend Statistik: header subtitle 'Nur gespielte Termine · Zukünftiges zählt nicht' present; 'Alle Jahre'/'Dieses Jahr' toggle re-fetches with correct scope (metric cards update from 0/7 for season view); 'Serie 🔥' chip present, ranking under Serie shows '2 🔥' for Josh with subtitle '2× in Folge zugesagt' and '0 🔥 · Noch keine Serie' for others; Gesamt/Spiele/Trainings modes show 'X von Y zugesagt' with Y=past-only counts ('2 von 7 zugesagt' for Josh). Frontend Zahlungen (as Sascha): 'Offene Beträge pro Monat' section renders with monthly rows exactly as expected — September 2026 (0,00 €, 1 offen) and August 2026 (2,00 €, 3 offen). Filip (no cashbox) does NOT see the Kasse tab at all (href=null in the tabs layout) — stricter than a locked message, which is acceptable. No crashes observed. Backend pytest: 13/13 passed. No new bugs found; no code changes required.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_stats_payments.py",
+    "/app/test_reports/pytest/iter14.xml"
+  ],
+  "action_items": [
+    "Optional: for a player who is a cashbox recipient but is later removed while the app is open, the Zahlungen screen's locked-fallback still renders correctly (kept in code, path exercised via 403 in api.ts). No fix needed.",
+    "Optional UX polish (non-blocking): the 'Kasse' tab label is fine, but Statistik->'Serie 🔥' chip could remain highlighted with an outline in dark-mode; currently already meets AA contrast on default theme."
+  ],
+  "critical_code_review_comments": [
+    "backend/routers/stats.py — is_past uses ISO string comparison (date <= today_iso). Works because all event dates are YYYY-MM-DD; safe. Good separation: past_games/past_trainings computed BEFORE scope narrowing, ensuring 'future never counts'.",
+    "backend/routers/stats.py — streak_of iterates ALL past events sorted desc regardless of scope; matches spec that streak is all-time and independent of the toggle.",
+    "backend/routers/stats.py — past_rate/past_confirmed/past_total explicitly exclude null answers (only status in {zugesagt, abgesagt}) — matches Treuester-Spieler spec.",
+    "backend/routers/cashboxes.py — monthly_open aggregates ONLY status=='open' payments across all cash boxes; keys correctly built from created_at[:7]; German month labels via MONTHS_DE lookup; sorted month desc.",
+    "frontend/app/(tabs)/statistik.tsx — scope state triggers re-fetch via api.stats(scope) inside useCallback dep; Chips value/onChange wiring correct. Header subtitle hard-coded ✓.",
+    "frontend/app/(tabs)/zahlungen.tsx — renders monthly_open section only when list non-empty; testIDs 'monthly-{YYYY-MM}' allow reliable e2e.",
+    "frontend/app/(tabs)/_layout.tsx — Kasse tab hidden via href:null for non-recipients — cleaner than showing a locked screen."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_stats_payments.py (new — 13 pytest cases covering stats scope/streak/past-only rules and payments monthly_open aggregation + RBAC)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (Statistik toggle + Serie chip + Y=past-only subtitles + Zahlungen monthly_open section all rendered)"},
+  "seed_data_creation": "None. Read-only testing (only GETs + login). No events/RSVPs/payments modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_iter14_stats_payments.py for any change touching /api/stats or /api/payments/monthly_open. Josh has 1 zugesagt on past game and 1 on past training (2 total = past_confirmed) out of 7 past events = 29% overall_rate; his streak is 2. Sascha's current open payments (as of 2026-09-14): September 2026 → 1 open @ 0€, August 2026 → 3 open totaling 2€. All stats future-events must be excluded via is_past helper — do not remove that filter. Frontend 'Kasse' tab title maps to route 'zahlungen'. To reach it in Playwright, use `page.get_by_text('Kasse', exact=True).last` (the .first hits the payment-picker chip on Termine)."
+}
