@@ -6,6 +6,12 @@ import jwt
 from dotenv import load_dotenv
 from passlib.context import CryptContext
 
+# CryptContext Konfiguration
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__ident="2b"  # Verhindert den internen Legacy-Test von passlib
+)
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
