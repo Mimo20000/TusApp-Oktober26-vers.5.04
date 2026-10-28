@@ -181,16 +181,16 @@ async def update_player_status(player_id: str, body: StatusUpdate, _coach: Coach
     return {"ok": True, "id": player_id, "status": body.status}
 
 
-@router.post("/players/{player_id}/set-password", dependencies=[Depends(set_password_limit)])
-async def set_password(player_id: str, body: PasswordBody):
+@router.post("/players/{player_id}/login", dependencies=[Depends(login_limit)])
+async def login(player_id: str, body: PasswordBody):
     p = await db.players.find_one({"id": player_id})
-    if not p:
-        raise HTTPException(status_code=404, detail="Spieler nicht gefunden")
-    if len(body.password) < 4:
-        raise HTTPException(status_code=400, detail="Passwort muss mind. 4 Zeichen haben")
-    await db.players.update_one(
-        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(body.password)}}
-    )
+    if not p or not p.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
+    
+    safe_password = body.password[:72]
+    
+    if not pwd_context.verify(safe_password, p["password_hash"]):
+        raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
     return {"access_token": create_token(player_id), "player_id": player_id}
 
 
@@ -198,9 +198,11 @@ async def set_password(player_id: str, body: PasswordBody):
 async def login(player_id: str, body: PasswordBody):
     p = await db.players.find_one({"id": player_id})
     if not p or not p.get("password_hash"):
-        # Same message regardless of cause to avoid user-enumeration side channel.
         raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
-    if not pwd_context.verify(body.password, p["password_hash"]):
+    
+    safe_password = body.password[:72]
+    
+    if not pwd_context.verify(safe_password, p["password_hash"]):
         raise HTTPException(status_code=401, detail="Anmeldung fehlgeschlagen")
     return {"access_token": create_token(player_id), "player_id": player_id}
 
@@ -253,8 +255,11 @@ async def reset_password(player_id: str, body: ResetPasswordBody):
     if not pwd_context.verify(body.code.strip(), rec["code_hash"]):
         await db.reset_codes.update_one({"player_id": player_id}, {"$inc": {"attempts": 1}})
         raise HTTPException(status_code=401, detail="Falscher Code.")
+    
+    safe_password = body.password[:72]
+    
     await db.players.update_one(
-        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(body.password)}}
+        {"id": player_id}, {"$set": {"password_hash": pwd_context.hash(safe_password)}}
     )
     await db.reset_codes.delete_one({"player_id": player_id})
     return {"access_token": create_token(player_id), "player_id": player_id}
