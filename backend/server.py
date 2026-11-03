@@ -44,11 +44,25 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    await seed_if_empty()
-    await seed_cashboxes_if_empty()
-    await check_and_send_birthdays()
-    await check_and_send_rsvp_reminders()
+    try:
+        await seed_if_empty()
+    except Exception as e:
+        logger.error(f"Fehler bei seed_if_empty: {e}")
 
+    try:
+        await seed_cashboxes_if_empty()
+    except Exception as e:
+        logger.error(f"Fehler bei seed_cashboxes_if_empty: {e}")
+
+    try:
+        await check_and_send_birthdays()
+    except Exception as e:
+        logger.error(f"Fehler bei check_and_send_birthdays: {e}")
+
+    try:
+        await check_and_send_rsvp_reminders()
+    except Exception as e:
+        logger.error(f"Fehler bei check_and_send_rsvp_reminders: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
