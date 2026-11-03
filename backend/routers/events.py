@@ -20,7 +20,7 @@ async def get_events(_current: CurrentPlayer):
         {"$or": [{"cancelled": {"$exists": False}}, {"cancelled": False}]},
         {"_id": 0},
     ).to_list(500)
-    docs.sort(key=lambda e: (e["date"], e["time"]))
+    docs.sort(key=lambda e: (e.get("date", "9999-12-31"), e.get("time", "00:00")))
     return docs
 
 
