@@ -11,12 +11,14 @@ from routers import attendance, chat, events, files, misc, players, stats, cashb
 from routers.cashboxes import seed_cashboxes_if_empty
 from fastapi.staticfiles import StaticFiles
 
-# Bindet den upload-Ordner unter dem Pfad /upload ein
-app.mount("/upload", StaticFiles(directory="upload"), name="upload")
+# 1. Erst muss die FastAPI-Instanz erstellt werden!
+app = FastAPI()
+
+# 2. Danach kann .mount aufgerufen werden (directory="backend/upload" oder "upload", je nach Projektstruktur)
+app.mount("/upload", StaticFiles(directory="backend/upload"), name="upload")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-app = FastAPI()
 
 @app.get("/")
 async def root():
