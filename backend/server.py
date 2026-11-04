@@ -9,7 +9,10 @@ from birthday import check_and_send_birthdays
 from reminders import check_and_send_rsvp_reminders
 from routers import attendance, chat, events, files, misc, players, stats, cashboxes, bwhv, carpool
 from routers.cashboxes import seed_cashboxes_if_empty
+from fastapi.staticfiles import StaticFiles
 
+# Bindet den upload-Ordner unter dem Pfad /upload ein
+app.mount("/upload", StaticFiles(directory="upload"), name="upload")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
