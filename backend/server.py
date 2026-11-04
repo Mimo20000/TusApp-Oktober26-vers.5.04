@@ -1,7 +1,9 @@
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from db import client
 from seed import seed_if_empty
@@ -9,13 +11,17 @@ from birthday import check_and_send_birthdays
 from reminders import check_and_send_rsvp_reminders
 from routers import attendance, chat, events, files, misc, players, stats, cashboxes, bwhv, carpool
 from routers.cashboxes import seed_cashboxes_if_empty
-from fastapi.staticfiles import StaticFiles
 
-# 1. Erst muss die FastAPI-Instanz erstellt werden!
+# 1. Erst die FastAPI-Instanz erstellen
 app = FastAPI()
 
-# 2. Danach kann .mount aufgerufen werden (directory="backend/upload" oder "upload", je nach Projektstruktur)
-app.mount("/upload", StaticFiles(directory="backend/upload"), name="upload")
+# 2. Automatischen und sicheren Pfad zum upload-Ordner ermitteln
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "upload"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# 3. Sicher mounten
+app.mount("/upload", StaticFiles(directory=str(UPLOAD_DIR)), name="upload")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
