@@ -1,13 +1,10 @@
 import json
-import os
 from pathlib import Path
 from pymongo import MongoClient
-from dotenv import load_dotenv
 
-load_dotenv()
-
-MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGO_URL") or "mongodb://localhost:27017"
-DB_NAME = os.getenv("DB_NAME", "tus-app")
+# Ihre MongoDB Atlas URL mit der Datenbank 'tus-app'
+MONGO_URI = "mongodb+srv://mimonicara_db_user:X8Bz7uIHvw7xrdR1@cluster0.x1jlmax.mongodb.net/tus-app?retryWrites=true&w=majority"
+DB_NAME = "tus-app"
 
 def import_json_backup():
     backup_path = Path(__file__).resolve().parent / "tus_backup_allesdrin.json"
@@ -22,7 +19,7 @@ def import_json_backup():
     with open(backup_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    print(f"🔌 Verbinde mit MongoDB (Datenbank: {DB_NAME})...")
+    print(f"🔌 Verbinde mit MongoDB Atlas (Datenbank: {DB_NAME})...")
     client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
 
@@ -42,7 +39,7 @@ def import_json_backup():
                 else:
                     collection.insert_one(doc)
 
-    print("✅ Backup 'tus_backup_allesdrin.json' erfolgreich in MongoDB importiert!")
+    print("✅ Backup 'tus_backup_allesdrin.json' erfolgreich in MongoDB Atlas importiert!")
 
 if __name__ == "__main__":
     import_json_backup()
