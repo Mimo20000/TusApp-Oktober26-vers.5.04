@@ -45,22 +45,13 @@ async def _is_coach(pid: str) -> bool:
 
 @router.get("/players", response_model=List[Player])
 async def get_players(current_player_id: OptionalPlayer):
-    """Roster listing.
-
-    - Anonymous callers (login-screen picker) receive only the minimal fields
-      needed to render the name list; personal data (email, birthdate,
-      jersey_number, avatar_file_id, spieler_id) is stripped.
-    - Authenticated callers receive the full player records so the Kader tab,
-      chat, and event details can render contact info, jersey badges and
-      avatar thumbnails.
-    """
     docs = await db.players.find({}, {"_id": 0}).to_list(500)
     for d in docs:
         d["has_password"] = bool(d.get("password_hash"))
         d.pop("password_hash", None)
         if current_player_id is None:
             for k in ("email", "birthdate", "jersey_number", "avatar_file_id", "spieler_id"):
-                d.pop(k, None)
+                d.pop(k, None)  # <--- Löscht die Daten!
     docs.sort(key=lambda p: p["name"])
     return docs
 
