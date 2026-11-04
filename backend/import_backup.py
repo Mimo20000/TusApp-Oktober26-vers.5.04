@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from pymongo import MongoClient
 
-# Ihre MongoDB Atlas URL mit der Datenbank 'tus-app'
 MONGO_URI = "mongodb+srv://mimonicara_db_user:X8Bz7uIHvw7xrdR1@cluster0.x1jlmax.mongodb.net/tus-app?retryWrites=true&w=majority"
 DB_NAME = "tus-app"
 
@@ -28,6 +27,20 @@ def import_json_backup():
             collection = db[collection_name]
             print(f"📥 Importiere {len(docs)} Einträge in Collection '{collection_name}'...")
             for doc in docs:
+                # Falls es sich um die 'players'-Collection handelt, sorgen wir für maximale Kompatibilität der Feldnamen:
+                if collection_name == "players":
+                    # Falls z.B. jersey_number da ist, kopieren wir sie auf 'number' und umgekehrt
+                    if "jersey_number" in doc and doc["jersey_number"] is not None:
+                        doc["number"] = doc["jersey_number"]
+                    elif "number" in doc and doc["number"] is not None:
+                        doc["jersey_number"] = doc["number"]
+                        
+                    # Dasselbe für Geburtsdatum
+                    if "birthdate" in doc and doc["birthdate"] is not None:
+                        doc["geburtsdatum"] = doc["birthdate"]
+                    elif "geburtsdatum" in doc and doc["geburtsdatum"] is not None:
+                        doc["birthdate"] = doc["geburtsdatum"]
+
                 filter_query = {}
                 if "_id" in doc and doc["_id"] is not None:
                     filter_query = {"_id": doc["_id"]}
@@ -39,7 +52,7 @@ def import_json_backup():
                 else:
                     collection.insert_one(doc)
 
-    print("✅ Backup 'tus_backup_allesdrin.json' erfolgreich in MongoDB Atlas importiert!")
+    print("✅ Backup erfolgreich mit kombinierten Feldnamen in MongoDB Atlas importiert!")
 
 if __name__ == "__main__":
     import_json_backup()
