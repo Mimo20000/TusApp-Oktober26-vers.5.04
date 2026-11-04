@@ -7,17 +7,16 @@ MONGO_URI = "mongodb+srv://mimonicara_db_user:X8Bz7uIHvw7xrdR1@cluster0.x1jlmax.
 DB_NAME = "tus-app"
 
 def migrate_local_uploads():
-    # Suchen Sie nach dem lokalen Uploads-Ordner im Backend
+    # Suchen nach dem lokalen 'upload'-Ordner direkt im Backend
     backend_dir = Path(__file__).resolve().parent
-    upload_dir = backend_dir / "uploads" # Falls Ihr Ordner anders heißt (z.B. "upload"), hier anpassen!
+    upload_dir = backend_dir / "upload"
     
     if not upload_dir.exists():
-        # Alternativ im Hauptverzeichnis suchen
-        upload_dir = backend_dir.parent / "uploads"
+        # Falls er stattdessen im Hauptverzeichnis liegt
+        upload_dir = backend_dir.parent / "upload"
 
     if not upload_dir.exists():
-        print(f"❌ Fehler: Kein lokaler 'uploads'-Ordner gefunden unter {upload_dir}")
-        print("Bitte passen Sie den Pfad im Skript an, falls Ihr Ordner anders heißt.")
+        print(f"❌ Fehler: Kein lokaler 'upload'-Ordner gefunden unter {upload_dir}")
         return
 
     print(f"📂 Durchsuche Ordner: {upload_dir}")
@@ -33,11 +32,18 @@ def migrate_local_uploads():
             with open(file_path, "rb") as f:
                 file_data = f.read()
 
+            # Passenden Mime-Type ermitteln
+            mime_type = "image/jpeg"
+            if filename.lower().endswith('.png'):
+                mime_type = "image/png"
+            elif filename.lower().endswith(('.jpg', '.jpeg')):
+                mime_type = "image/jpeg"
+
             # In MongoDB speichern
             doc = {
                 "filename": filename,
                 "data": bson.Binary(file_data),
-                "mime": "image/jpeg" if filename.lower().endswith(('.jpg', '.jpeg')) else "image/png"
+                "mime": mime_type
             }
             
             # Mit Upsert einfügen, damit nichts doppelt reinkommt
@@ -45,7 +51,7 @@ def migrate_local_uploads():
             print(f"📤 Hochgeladen: {filename}")
             count += 1
 
-    print(f"✅ Fertig! {count} Dateien wurden in MongoDB Atlas ('uploads_aus_emergent') übertragen.")
+    print(f"✅ Fertig! {count} Dateien aus dem 'upload'-Ordner wurden erfolgreich in MongoDB Atlas übertragen.")
 
 if __name__ == "__main__":
     migrate_local_uploads()
