@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"message": "TuS App Backend läuft!", "status": "online"}
+
 api_router = APIRouter(prefix="/api")
 api_router.include_router(misc.router)
 api_router.include_router(players.router)
