@@ -1,0 +1,62 @@
+import asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
+
+# 1. MongoDB Verbindungs-String
+# ERSETZEN Sie den folgenden Link durch Ihren echten MongoDB Atlas String!
+MONGO_URL = "mongodb+x509://... ODER mongodb+srv://username:password@cluster.mongodb.net/tusapp"
+DB_NAME = "tusapp"  # Tragen Sie hier den genauen Namen Ihrer Datenbank ein
+
+# Ihre Termin-Daten als flache Liste
+EVENTS_DATA = [
+    {"id": "T1", "type": "Spiel", "date": "2026-10-11", "time": "14:30", "home": "TuS Oberhausen II", "away": "HG Müllheim/Neuenburg III", "opponent": "HG Müllheim/Neuenburg III", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. HG Müllheim/Neuenburg III", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T2", "type": "Spiel", "date": "2026-10-24", "time": "14:30", "home": "SG Kenzingen/Herbolzheim III", "away": "TuS Oberhausen II", "opponent": "SG Kenzingen/Herbolzheim III", "location": "Herbolzheim/Breisgauhalle", "title": "SG Kenzingen/Herbolzheim III vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T3", "type": "Spiel", "date": "2026-11-07", "time": "14:30", "home": "TSV March II", "away": "TuS Oberhausen II", "opponent": "TSV March II", "location": "March-Buchheim/Sporthalle", "title": "TSV March II vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T4", "type": "Spiel", "date": "2026-11-21", "time": "14:30", "home": "TuS Oberhausen II", "away": "SG Maulburg/Steinen II", "opponent": "SG Maulburg/Steinen II", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. SG Maulburg/Steinen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T5", "type": "Spiel", "date": "2026-11-28", "time": "13:00", "home": "SG Freiburg IV", "away": "TuS Oberhausen II", "opponent": "SG Freiburg IV", "location": "Freiburg/Wentzingerhalle", "title": "SG Freiburg IV vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T6", "type": "Spiel", "date": "2026-12-05", "time": "14:30", "home": "TuS Oberhausen II", "away": "SG Waldkirch/Denzlingen III", "opponent": "SG Waldkirch/Denzlingen III", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. SG Waldkirch/Denzlingen III", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T7", "type": "Spiel", "date": "2027-02-28", "time": "13:00", "home": "HG Müllheim/Neuenburg III", "away": "TuS Oberhausen II", "opponent": "HG Müllheim/Neuenburg III", "location": "Neuenburg/Sporthalle Zähringer-Schule", "title": "HG Müllheim/Neuenburg III vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T8", "type": "Spiel", "date": "2027-03-07", "time": "14:30", "home": "TuS Oberhausen II", "away": "SG Kenzingen/Herbolzheim III", "opponent": "SG Kenzingen/Herbolzheim III", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. SG Kenzingen/Herbolzheim III", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T9", "type": "Spiel", "date": "2027-03-14", "time": "13:00", "home": "SG Waldkirch/Denzlingen III", "away": "TuS Oberhausen II", "opponent": "SG Waldkirch/Denzlingen III", "location": "Waldkirch/Kastelberghalle", "title": "SG Waldkirch/Denzlingen III vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T10", "type": "Spiel", "date": "2027-03-21", "time": "14:30", "home": "TuS Oberhausen II", "away": "TSV March II", "opponent": "TSV March II", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. TSV March II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T11", "type": "Spiel", "date": "2027-04-11", "time": "14:30", "home": "TuS Oberhausen II", "away": "SG Freiburg IV", "opponent": "SG Freiburg IV", "location": "Rheinhausen/Rheinmatthalle", "title": "TuS Oberhausen II vs. SG Freiburg IV", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "T12", "type": "Spiel", "date": "2027-04-24", "time": "18:00", "home": "SG Maulburg/Steinen II", "away": "TuS Oberhausen II", "opponent": "SG Maulburg/Steinen II", "location": "Steinen/Sporthalle", "title": "SG Maulburg/Steinen II vs. TuS Oberhausen II", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR1", "type": "Training", "date": "2026-07-30", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR2", "type": "Training", "date": "2026-08-06", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR3", "type": "Training", "date": "2026-08-13", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR4", "type": "Training", "date": "2026-08-20", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR5", "type": "Training", "date": "2026-08-27", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR6", "type": "Training", "date": "2026-09-03", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR7", "type": "Training", "date": "2026-09-10", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR8", "type": "Training", "date": "2026-09-17", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR9", "type": "Training", "date": "2026-09-24", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR10", "type": "Training", "date": "2026-10-01", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR11", "type": "Training", "date": "2026-10-08", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR12", "type": "Training", "date": "2026-10-15", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR13", "type": "Training", "date": "2026-10-22", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR14", "type": "Training", "date": "2026-10-29", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR15", "type": "Training", "date": "2026-11-05", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR16", "type": "Training", "date": "2026-11-12", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR17", "type": "Training", "date": "2026-11-19", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR18", "type": "Training", "date": "2026-11-26", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR19", "type": "Training", "date": "2026-12-03", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "TR20", "type": "Training", "date": "2026-12-10", "time": "19:00", "home": None, "away": None, "opponent": None, "location": "Rheinhausen/Rheinmatthalle", "title": "Training", "created_at": None, "notify_at": None, "cancelled": False},
+    {"id": "EV8e70f1f7", "type": "Treffen", "date": "2027-06-01", "time": "20:00", "home": None, "away": None, "opponent": None, "location": "Vereinsheim", "title": "Treffen", "created_at": "2026-07-27T05:49:11.623012+00:00", "notify_at": "2026-07-27T05:49:11.623012+00:00", "cancelled": False}
+]
+
+async def import_data():
+    client = AsyncIOMotorClient(MONGO_URL)
+    db = client[DB_NAME]
+    collection = db["events"]
+
+    # 1. Altes fehlerhaftes (verschachteltes) Dokument bereinigen
+    print("Räume alte fehlerhafte Collection auf...")
+    await collection.delete_many({})
+
+    # 2. Alle Termine als einzelne Dokumente importieren
+    print(f"Füge {len(EVENTS_DATA)} Termine einzeln ein...")
+    result = await collection.insert_many(EVENTS_DATA)
+    
+    print(f" ERFOLG! {len(result.inserted_ids)} Termine wurden erfolgreich importiert!")
+
+if __name__ == "__main__":
+    asyncio.run(import_data())
